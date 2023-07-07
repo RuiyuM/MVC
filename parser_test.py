@@ -13,6 +13,9 @@ def get_parser():
     parser.add_argument('-NUM_CLASSES', type=int, default=cfg.DATA_INFO["NUM_CLASSES"])
     parser.add_argument('-MAX_NUM_VIEWS', type=int, default=cfg.MAX_NUM_VIEWS)
     parser.add_argument('-IMAGE_SIZE', type=int, default=cfg.IMAGE_SIZE)
+    parser.add_argument('-MV_QUERIES', type=int, default=cfg.MV_QUERIES)
+    parser.add_argument('-QUERIES_STRATEGY', type=str, default=cfg.QUERIES_STRATEGY)
+
 
     parser.add_argument('-ARCHITECTURE', type=str, default=cfg.ARCHITECTURE)
     parser.add_argument('-FEATURE_DIM', type=int, default=cfg.FEATURE_DIM)

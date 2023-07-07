@@ -1,6 +1,6 @@
 # Define dataset
 DATA_ROOT = "./data/"
-MAX_NUM_VIEWS = 6
+MAX_NUM_VIEWS = 10
 IMAGE_SIZE = 224
 DATA_INFO = {"CLASSES":['0000', '0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008', '0009', '0010',
                         '0011', '0012', '0013', '0014', '0015', '0016', '0017', '0018', '0019', '0020', '0021',
@@ -33,7 +33,10 @@ SV_MOMENTUM = 0.9
 SV_WEIGHT_DECAY = 1e-3
 SV_LR_INIT = 1e-2
 
-MV_EPOCHS = 50
+MV_EPOCHS = 10
+MV_QUERIES = 10
+QUERIES_STRATEGY = 'uncertainty'
+
 MV_WARMUP_EPOCHS = 1
 TRAIN_MV_BS = 32
 TEST_MV_BS = 1

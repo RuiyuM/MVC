@@ -8,12 +8,13 @@ import torch.optim as optim
 import torch.backends.cudnn as cudnn
 from termcolor import cprint
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 sys.dont_write_bytecode = True
 warnings.filterwarnings('ignore')
-
+from unlabeled_Sampling_Dataset import Unlabeled_Dataset
 import utils as tool
-import parser as parser
+import parser_test as parser_2
 from model.svcnn import SVCNN
 from model.mvcnn_new import MVCNNNew
 from model.gvcnn import GVCNN
@@ -26,11 +27,12 @@ from dataset_multi_view import MultiViewDataset
 from loss import LabelCrossEntropy
 from engine_single_view import SingleViewEngine
 from engine_multi_view import MultiViewEngine
+import sampling
 
 if __name__ == '__main__':
     # set options
-    opt = parser.get_parser()
-    cprint('*'*25 + ' Start ' + '*'*25, 'yellow')
+    opt = parser_2.get_parser()
+    cprint('*' * 25 + ' Start ' + '*' * 25, 'yellow')
 
     # set seed
     seed = opt.SEED
@@ -55,28 +57,32 @@ if __name__ == '__main__':
     model_stage1 = SVCNN(opt.NUM_CLASSES, opt.ARCHITECTURE, opt.FEATURE_DIM, pretrained=True).to(device)
 
     # define dataset
-    train_dataset = SingleViewDataset(opt.CLASSES, opt.GROUPS, opt.NUM_CLASSES, opt.DATA_ROOT, 'train', opt.SV_TYPE, use_train=True)
+    train_dataset = SingleViewDataset(opt.CLASSES, opt.GROUPS, opt.NUM_CLASSES, opt.DATA_ROOT, 'train', opt.SV_TYPE,
+                                      use_train=True)
     if opt.MV_FLAG == 'TRAIN':
-        cprint('*'*15 + ' Stage 1 ' + '*'*15, 'yellow')
+        cprint('*' * 15 + ' Stage 1 ' + '*' * 15, 'yellow')
         print('Number of Training Images:', len(train_dataset))
 
-    train_data = DataLoader(train_dataset, batch_size=opt.TRAIN_SV_BS, num_workers=opt.NUM_WORKERS, shuffle=True, pin_memory=True, worker_init_fn=tool.seed_worker)
+    train_data = DataLoader(train_dataset, batch_size=opt.TRAIN_SV_BS, num_workers=opt.NUM_WORKERS, shuffle=True,
+                            pin_memory=True, worker_init_fn=tool.seed_worker)
 
     # define optimizer
-    optimizer = optim.SGD(model_stage1.parameters(), lr=opt.SV_LR_INIT, weight_decay=opt.SV_WEIGHT_DECAY, momentum=opt.SV_MOMENTUM)
+    optimizer = optim.SGD(model_stage1.parameters(), lr=opt.SV_LR_INIT, weight_decay=opt.SV_WEIGHT_DECAY,
+                          momentum=opt.SV_MOMENTUM)
 
     # define criterion
     criterion = LabelCrossEntropy()
 
     # define engine
-    engine = SingleViewEngine(model_stage1, train_data, None, opt.NUM_CLASSES, opt.GROUPS, optimizer, opt.SV_TYPE, criterion, opt.SV_WEIGHT_PATH, opt.SV_OUTPUT_PATH, device, single_view=False)
+    engine = SingleViewEngine(model_stage1, train_data, None, opt.NUM_CLASSES, opt.GROUPS, optimizer, opt.SV_TYPE,
+                              criterion, opt.SV_WEIGHT_PATH, opt.SV_OUTPUT_PATH, device, single_view=False)
 
     # run single view
-    if opt.MV_FLAG == 'TRAIN':
-        engine.train_base(opt.SV_EPOCHS, len(train_dataset))
+    # if opt.MV_FLAG == 'TRAIN':
+    #     engine.train_base(opt.SV_EPOCHS, len(train_dataset))
 
     if opt.MV_FLAG == 'TRAIN':
-        cprint('*'*15 + ' Stage 2 ' + '*'*15, 'yellow')
+        cprint('*' * 15 + ' Stage 2 ' + '*' * 15, 'yellow')
 
     # define model
     if opt.MV_TYPE == 'MVCNN_NEW':
@@ -84,10 +90,13 @@ if __name__ == '__main__':
     elif opt.MV_TYPE == 'GVCNN':
         model_stage2 = GVCNN(model_stage1, opt.GVCNN_M, opt.ARCHITECTURE, opt.IMAGE_SIZE).to(device)
     elif opt.MV_TYPE == 'DAN':
-        model_stage2 = DAN(model_stage1, opt.DAN_H, opt.FEATURE_DIM, opt.DAN_NUM_HEADS_F, opt.DAN_INNER_DIM_F, opt.DAN_DROPOUT_F).to(device)
+        model_stage2 = DAN(model_stage1, opt.DAN_H, opt.FEATURE_DIM, opt.DAN_NUM_HEADS_F, opt.DAN_INNER_DIM_F,
+                           opt.DAN_DROPOUT_F).to(device)
     elif opt.MV_TYPE == 'CVR':
-        model_stage2 = CVR(model_stage1, opt.CVR_K, opt.FEATURE_DIM, opt.CVR_NUM_HEADS_F, opt.CVR_INNER_DIM_F, opt.CVR_NORM_EPS_F,
-                           opt.CVR_OTK_HEADS_F, opt.CVR_OTK_EPS_F, opt.CVR_OTK_MAX_ITER_F, opt.CVR_DROPOUT_F, opt.CVR_COORD_DIM_F).to(device)
+        model_stage2 = CVR(model_stage1, opt.CVR_K, opt.FEATURE_DIM, opt.CVR_NUM_HEADS_F, opt.CVR_INNER_DIM_F,
+                           opt.CVR_NORM_EPS_F,
+                           opt.CVR_OTK_HEADS_F, opt.CVR_OTK_EPS_F, opt.CVR_OTK_MAX_ITER_F, opt.CVR_DROPOUT_F,
+                           opt.CVR_COORD_DIM_F).to(device)
     elif opt.MV_TYPE == 'MVFN':
         model_stage2 = MVFN(model_stage1, opt.FEATURE_DIM).to(device)
     elif opt.MV_TYPE == 'SMVCNN':
@@ -98,22 +107,33 @@ if __name__ == '__main__':
         model_stage2.eval()
 
     # define dataset
-    train_dataset = MultiViewDataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'train', opt.MAX_NUM_VIEWS, use_train=True)
-    valid_dataset = MultiViewDataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'valid', opt.MAX_NUM_VIEWS, use_train=False)
-    test_dataset = MultiViewDataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'test', opt.MAX_NUM_VIEWS, use_train=False)
+    train_dataset = MultiViewDataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'train', opt.MAX_NUM_VIEWS,
+                                     use_train=True)
+    # dataloader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+    # batch = next(iter(dataloader))
+    valid_dataset = MultiViewDataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'valid', opt.MAX_NUM_VIEWS,
+                                     use_train=False)
+    # dataloader = DataLoader(valid_dataset, batch_size=32, shuffle=True)
+    # batch = next(iter(dataloader))
+    test_dataset = MultiViewDataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'test', opt.MAX_NUM_VIEWS,
+                                    use_train=False)
     if opt.MV_FLAG in ['TRAIN', 'TEST']:
         print('Number of Training Sets:', len(train_dataset))
         print('Number of Valid Sets:', len(valid_dataset))
         print('Number of Test Sets:', len(test_dataset))
 
-    train_data = DataLoader(train_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS, shuffle=True, pin_memory=True, worker_init_fn=tool.seed_worker)
-    valid_data = DataLoader(valid_dataset, batch_size=opt.TEST_MV_BS, num_workers=opt.NUM_WORKERS, shuffle=False, pin_memory=True, worker_init_fn=tool.seed_worker)
-    test_data = DataLoader(test_dataset, batch_size=opt.TEST_MV_BS, num_workers=opt.NUM_WORKERS, shuffle=False, pin_memory=True, worker_init_fn=tool.seed_worker)
+    train_data = DataLoader(train_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS, shuffle=True,
+                            pin_memory=True, worker_init_fn=tool.seed_worker)
+    valid_data = DataLoader(valid_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS, shuffle=False,
+                            pin_memory=True, worker_init_fn=tool.seed_worker)
+    test_data = DataLoader(test_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS, shuffle=False,
+                           pin_memory=True, worker_init_fn=tool.seed_worker)
 
     # define optimizer
-    optimizer = optim.SGD(model_stage2.parameters(), lr=opt.MV_LR_INIT, weight_decay=opt.MV_WEIGHT_DECAY, momentum=opt.MV_MOMENTUM)
-    scheduler = tool.CosineDecayLR(optimizer, T_max=opt.MV_EPOCHS*len(train_data), lr_init=opt.MV_LR_INIT, 
-                                   lr_min=opt.MV_LR_END, warmup=opt.MV_WARMUP_EPOCHS*len(train_data))
+    optimizer = optim.SGD(model_stage2.parameters(), lr=opt.MV_LR_INIT, weight_decay=opt.MV_WEIGHT_DECAY,
+                          momentum=opt.MV_MOMENTUM)
+    scheduler = tool.CosineDecayLR(optimizer, T_max=opt.MV_EPOCHS * len(train_data), lr_init=opt.MV_LR_INIT,
+                                   lr_min=opt.MV_LR_END, warmup=opt.MV_WARMUP_EPOCHS * len(train_data))
 
     # set path
     if opt.MV_FLAG == 'TRAIN':
@@ -121,42 +141,81 @@ if __name__ == '__main__':
             os.mkdir(opt.MV_WEIGHT_PATH)
 
     # define engine
-    engine = MultiViewEngine(model_stage2, train_data, valid_data, opt.NUM_CLASSES, optimizer, scheduler, criterion, opt.MV_WEIGHT_PATH, device, opt.MV_TYPE)
+    # engine = MultiViewEngine(model_stage2, train_data, valid_data, opt.NUM_CLASSES, optimizer, scheduler, criterion,
+    #                          opt.MV_WEIGHT_PATH, device, opt.MV_TYPE)
 
     # run multi-view
-    if opt.MV_FLAG == 'TRAIN':
-        if opt.MV_TYPE in ['MVCNN_NEW', 'GVCNN', 'DAN', 'MVFN', 'SMVCNN']:
-            engine.train_base(opt.MV_EPOCHS)
-        elif opt.MV_TYPE == 'CVR':
-            vert = tool.get_vert(opt.CVR_K)
-            engine.train_cvr(opt.MV_EPOCHS, vert, opt.CVR_LAMBDA, opt.CVR_NORM_EPS_F)
-    elif opt.MV_FLAG == 'TEST':
-        cprint('*'*10 + ' Valid Sets ' + '*'*10, 'yellow')
-        engine.test(valid_data, opt.TEST_T)
-        cprint('*'*10 + ' Test Sets ' + '*'*10, 'yellow')
-        engine.test(test_data, opt.TEST_T)
-    elif opt.MV_FLAG == 'COMPUTATION':
-        cprint('*'*10 + ' Computational Efficiency ' + '*'*10, 'yellow')
-        # define inputs
-        inputs = torch.randn(opt.MAX_NUM_VIEWS, 3, opt.IMAGE_SIZE, opt.IMAGE_SIZE).to(device)
-        # measure parameters
-        p1, p2 = tool.get_parameters(model_stage1, model_stage2)
-        # measure FLOPs
-        f1, f2 = tool.get_FLOPs(model_stage1, model_stage2, inputs)
-        # measure latency
-        t1_mean, t1_std, t2_mean, t2_std = tool.get_time(model_stage1, model_stage2, inputs, opt.REPETITION)
-        cprint('*'*10 + ' SVCNN ' + '*'*10, 'yellow')
-        print('Model Size (M):', '%.2f' % (p1 / 1e6))
-        print('FLOPs (G):', '%.2f' % (f1 / 1e9))
-        print('Latency (ms):', '%.2f' % (t1_mean) + ' (mean)', '%.2f' % (t1_std) + ' (std)')
-        cprint('*'*10 + ' ' + opt.MV_TYPE + ' ' + '*'*10, 'yellow')
-        print('Model Size (M):', '%.2f' % (p2 / 1e6))
-        print('FLOPs (G):', '%.2f' % (f2 / 1e9))
-        print('Latency (ms):', '%.2f' % (t2_mean) + ' (mean)', '%.2f' % (t2_std) + ' (std)')
-    elif opt.MV_FLAG == 'CM':
-        cprint('*'*10 + ' Confusion Matrix ' + '*'*10, 'yellow')
-        confusion_matrix = engine.confusion_matrix(valid_data)
-        tool.plot_confusion_matrix(confusion_matrix, opt.GROUPS, opt.MV_TYPE)
+    for query in tqdm(range(opt.MV_QUERIES)):
+        engine = MultiViewEngine(model_stage2, train_data, valid_data, opt.NUM_CLASSES, optimizer, scheduler, criterion,
+                                 opt.MV_WEIGHT_PATH, device, opt.MV_TYPE)
+        if opt.MV_FLAG == 'TRAIN':
+            if opt.MV_TYPE in ['MVCNN_NEW', 'GVCNN', 'DAN', 'MVFN', 'SMVCNN']:
+                engine.train_base(opt.MV_EPOCHS)
+            elif opt.MV_TYPE == 'CVR':
+                vert = tool.get_vert(opt.CVR_K)
+                engine.train_cvr(opt.MV_EPOCHS, vert, opt.CVR_LAMBDA, opt.CVR_NORM_EPS_F)
+        elif opt.MV_FLAG == 'TEST':
+            cprint('*' * 10 + ' Valid Sets ' + '*' * 10, 'yellow')
+            engine.test(valid_data, opt.TEST_T)
+            cprint('*' * 10 + ' Test Sets ' + '*' * 10, 'yellow')
+            engine.test(test_data, opt.TEST_T)
+        elif opt.MV_FLAG == 'COMPUTATION':
+            cprint('*' * 10 + ' Computational Efficiency ' + '*' * 10, 'yellow')
+            # define inputs
+            inputs = torch.randn(opt.MAX_NUM_VIEWS, 3, opt.IMAGE_SIZE, opt.IMAGE_SIZE).to(device)
+            # measure parameters
+            p1, p2 = tool.get_parameters(model_stage1, model_stage2)
+            # measure FLOPs
+            f1, f2 = tool.get_FLOPs(model_stage1, model_stage2, inputs)
+            # measure latency
+            t1_mean, t1_std, t2_mean, t2_std = tool.get_time(model_stage1, model_stage2, inputs, opt.REPETITION)
+            cprint('*' * 10 + ' SVCNN ' + '*' * 10, 'yellow')
+            print('Model Size (M):', '%.2f' % (p1 / 1e6))
+            print('FLOPs (G):', '%.2f' % (f1 / 1e9))
+            print('Latency (ms):', '%.2f' % (t1_mean) + ' (mean)', '%.2f' % (t1_std) + ' (std)')
+            cprint('*' * 10 + ' ' + opt.MV_TYPE + ' ' + '*' * 10, 'yellow')
+            print('Model Size (M):', '%.2f' % (p2 / 1e6))
+            print('FLOPs (G):', '%.2f' % (f2 / 1e9))
+            print('Latency (ms):', '%.2f' % (t2_mean) + ' (mean)', '%.2f' % (t2_std) + ' (std)')
+        elif opt.MV_FLAG == 'CM':
+            cprint('*' * 10 + ' Confusion Matrix ' + '*' * 10, 'yellow')
+            confusion_matrix = engine.confusion_matrix(valid_data)
+            tool.plot_confusion_matrix(confusion_matrix, opt.GROUPS, opt.MV_TYPE)
 
-    cprint('*'*25 + ' Finish ' + '*'*25, 'yellow')
+        cprint('*' * 25 + ' Finish Training start sampling ' + '*' * 25, 'yellow')
 
+        unlabeled_sampling_labeled_data = train_dataset.selected_ind_train
+        unlabeled_sampling_labeled_data = [[item] for sublist in unlabeled_sampling_labeled_data for item in sublist]
+        unlabeled_sampling_unlabeled_data = train_dataset.unselected_ind_train
+        unlabeled_sampling_unlabeled_data = [[item] for sublist in unlabeled_sampling_unlabeled_data for item in sublist]
+
+        unlabeled_dataset = Unlabeled_Dataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'unlabeled',
+                                              opt.MAX_NUM_VIEWS, unlabeled_sampling_labeled_data,
+                                              unlabeled_sampling_unlabeled_data)
+        unlabeled_data = DataLoader(unlabeled_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS,
+                                    shuffle=True,
+                                    pin_memory=True, worker_init_fn=tool.seed_worker)
+        # batch = next(iter(unlabeled_data))
+
+        labeled_dataset = Unlabeled_Dataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'labeled',
+                                            opt.MAX_NUM_VIEWS, unlabeled_sampling_labeled_data,
+                                              unlabeled_sampling_unlabeled_data)
+        labeled_data = DataLoader(labeled_dataset, batch_size=opt.TEST_MV_BS, num_workers=opt.NUM_WORKERS,
+                                  shuffle=False,
+                                  pin_memory=True, worker_init_fn=tool.seed_worker)
+
+        if opt.QUERIES_STRATEGY == 'uncertainty':
+            selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.uncertainty_sampling(opt,
+                                                                                                                    engine,
+                                                                                                                    train_dataset,
+                                                                                                                    unlabeled_data,
+                                                                                                                    labeled_dataset)
+
+        print(len(selected_ind_train_after_sampling[0]))
+        print(len(unselected_ind_train__after_sampling[0]))
+
+        train_dataset = MultiViewDataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'train', opt.MAX_NUM_VIEWS,
+                                         use_train=True, selected_ind_train=selected_ind_train_after_sampling,
+                                         unselected_ind_train=unselected_ind_train__after_sampling)
+        train_data = DataLoader(train_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS, shuffle=True,
+                                pin_memory=True, worker_init_fn=tool.seed_worker)

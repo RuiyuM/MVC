@@ -13,7 +13,7 @@ sys.dont_write_bytecode = True
 warnings.filterwarnings('ignore')
 
 import utils as tool
-import parser as parser
+import parser_test as parser
 from model.svcnn import SVCNN
 from dataset_single_view import SingleViewDataset
 from dataset_multi_view import MultiViewDataset

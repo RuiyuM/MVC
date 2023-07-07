@@ -45,8 +45,9 @@ class SingleViewDataset(Dataset):
 
     def __getitem__(self, index):
         path = self.file_path[index]
-        class_name = path.split('/')[-3]
+        class_name = os.path.normpath(path).split(os.sep)[-3]
         class_id = self.classes.index(class_name)
+
         image = Image.open(self.file_path[index]).convert('RGB')
         if self.transform:
             image = self.transform(image)
