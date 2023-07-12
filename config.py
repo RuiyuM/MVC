@@ -35,7 +35,7 @@ SV_LR_INIT = 1e-2
 
 MV_EPOCHS = 10
 MV_QUERIES = 10
-QUERIES_STRATEGY = 'uncertainty'
+QUERIES_STRATEGY = 'dissimilarity_sampling' # options: ['dissimilarity_sampling', 'uncertainty']
 
 MV_WARMUP_EPOCHS = 1
 TRAIN_MV_BS = 32
