@@ -187,7 +187,8 @@ if __name__ == '__main__':
         unlabeled_sampling_labeled_data = train_dataset.selected_ind_train
         unlabeled_sampling_labeled_data = [[item] for sublist in unlabeled_sampling_labeled_data for item in sublist]
         unlabeled_sampling_unlabeled_data = train_dataset.unselected_ind_train
-        unlabeled_sampling_unlabeled_data = [[item] for sublist in unlabeled_sampling_unlabeled_data for item in sublist]
+        unlabeled_sampling_unlabeled_data = [[item] for sublist in unlabeled_sampling_unlabeled_data for item in
+                                             sublist]
 
         unlabeled_dataset = Unlabeled_Dataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'unlabeled',
                                               opt.MAX_NUM_VIEWS, unlabeled_sampling_labeled_data,
@@ -199,7 +200,7 @@ if __name__ == '__main__':
 
         labeled_dataset = Unlabeled_Dataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'labeled',
                                             opt.MAX_NUM_VIEWS, unlabeled_sampling_labeled_data,
-                                              unlabeled_sampling_unlabeled_data)
+                                            unlabeled_sampling_unlabeled_data)
         labeled_data = DataLoader(labeled_dataset, batch_size=opt.TEST_MV_BS, num_workers=opt.NUM_WORKERS,
                                   shuffle=False,
                                   pin_memory=True, worker_init_fn=tool.seed_worker)
@@ -212,11 +213,58 @@ if __name__ == '__main__':
                                                                                                                     labeled_dataset)
 
         if opt.QUERIES_STRATEGY == 'dissimilarity_sampling':
-            selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.dissimilarity_sampling(opt,
-                                                                                                                    engine,
-                                                                                                                    train_dataset,
-                                                                                                                    unlabeled_data,
-                                                                                                                    labeled_dataset)
+            selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.dissimilarity_sampling(
+                opt,
+                engine,
+                train_dataset,
+                unlabeled_data,
+                labeled_dataset)
+
+        if opt.QUERIES_STRATEGY == 'random':
+            selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.random_sampling(opt,
+                                                                                                               engine,
+                                                                                                               train_dataset,
+                                                                                                               unlabeled_data,
+                                                                                                               labeled_dataset)
+
+        if opt.QUERIES_STRATEGY == 'LfOSA':
+            selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.LfOSA(opt,
+                                                                                                     engine,
+                                                                                                     train_dataset,
+                                                                                                     unlabeled_data,
+                                                                                                     labeled_dataset)
+
+        if opt.QUERIES_STRATEGY == 'BGADL':
+            selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.bayesian_generative_active_learning(
+                opt,
+                engine,
+                train_dataset,
+                unlabeled_data,
+                labeled_dataset)
+
+        if opt.QUERIES_STRATEGY == 'OpenMax':
+            selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.open_max(opt,
+                                                                                                        engine,
+                                                                                                        train_data,
+                                                                                                        train_dataset,
+                                                                                                        unlabeled_data,
+                                                                                                        )
+
+        if opt.QUERIES_STRATEGY == 'Core_set':
+            selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.core_set(
+                opt,
+                engine,
+                train_dataset,
+                unlabeled_data,
+                labeled_dataset)
+
+        if opt.QUERIES_STRATEGY == 'dissimilarity_sampling':
+            selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.dissimilarity_sampling(
+                opt,
+                engine,
+                train_dataset,
+                unlabeled_data,
+                labeled_dataset)
 
         print(len(selected_ind_train_after_sampling[0]))
         print(len(unselected_ind_train__after_sampling[0]))
