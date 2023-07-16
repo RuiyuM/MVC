@@ -268,7 +268,7 @@ if __name__ == '__main__':
                 train_data)
 
         if opt.QUERIES_STRATEGY == 'certainty':
-            selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.dissimilarity_sampling(
+            selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.certainty_sampling(
                 opt,
                 engine,
                 train_dataset,

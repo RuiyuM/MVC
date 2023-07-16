@@ -590,3 +590,41 @@ def badge_sampling(opt, engine, train_dataset, labeled_data, unlabeled_data, tra
 
     return old_index_train, old_index_not_train
 
+def certainty_sampling(opt, engine, train_dataset, unlabeled_data, labeled_dataset):
+    engine.model.eval()
+    with torch.no_grad():
+        certainty_dict = {i: {"certainty": [], "path": []} for i in range(44)}  # Initialize dictionary for certainty and path
+
+        for index, (label, image, num_views, marks, train_path) in enumerate(unlabeled_data):
+            inputs = Variable(image).to(engine.device)
+            targets = Variable(label).to(engine.device)
+            B, V, C, H, W = inputs.shape
+            inputs = inputs.view(-1, C, H, W)
+            outputs, features, utilization = engine.model(B, V, num_views, inputs)
+
+            certainties = torch.softmax(outputs, dim=1).max(1).values.cpu().data  # Compute certainties
+
+            prediction = torch.max(outputs, 1)[1]
+            transform_targets = torch.max(targets, 1)[1]
+
+            for i in range(len(transform_targets)):
+                class_index = transform_targets[i].item()  # Get the class index
+                certainty_dict[class_index]["certainty"].append(certainties[i].item())  # Append the certainty
+                certainty_dict[class_index]["path"].append(train_path[i])  # Append the corresponding train path
+
+        old_index_train = train_dataset.selected_ind_train
+        old_index_not_train = train_dataset.unselected_ind_train
+
+        for class_index in range(44):
+            max_certainty_index = torch.argmax(torch.tensor(certainty_dict[class_index]["certainty"]))  # Get index of maximum certainty
+            highest_certainty_path = certainty_dict[class_index]["path"][max_certainty_index]  # Get corresponding path
+
+            # Append the highest_certainty_path to the corresponding sublist in old_index_train
+            old_index_train[class_index].append(highest_certainty_path)
+
+            # Remove the highest_certainty_path from the sublist in old_index_not_train at class_index
+            if highest_certainty_path in old_index_not_train[class_index]:
+                old_index_not_train[class_index].remove(highest_certainty_path)
+
+        return old_index_train, old_index_not_train
+
