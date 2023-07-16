@@ -9,6 +9,12 @@ from sklearn.metrics import pairwise_distances_argmin_min
 from sklearn.cluster import KMeans
 from sklearn.metrics import pairwise_distances
 from sklearn.metrics.pairwise import euclidean_distances
+from scipy import stats
+import torch.nn.functional as F
+from copy import deepcopy
+import pdb
+
+
 
 def uncertainty_sampling(opt, engine, train_dataset, unlabeled_data, labeled_dataset):
     engine.model.eval()
@@ -450,6 +456,137 @@ def core_set(opt, engine, train_dataset, unlabeled_data, labeled_dataset):
         old_index_train[label].append(selected_path)
         if selected_path in old_index_not_train[label]:
             old_index_not_train[label].remove(selected_path)
+
+    return old_index_train, old_index_not_train
+
+
+def init_centers(X, labels, K):
+    embs = torch.Tensor(X)
+    embs = embs.cuda()
+
+    # Group embeddings by class
+    grouped_embs = {c: [] for c in range(K)}
+    for i, (emb, label) in enumerate(zip(embs, labels)):
+        grouped_embs[label].append((emb, i))  # Store the embedding and index as a tuple in the 'grouped_embs' dictionary
+
+    indsAll = []
+    for c in range(K):
+        class_embs = grouped_embs[c]
+        if not class_embs:  # If no examples for this class, skip
+            continue
+
+        class_embs, indices = zip(*class_embs)  # Unzip the list of tuples into separate lists
+
+        class_embs = torch.stack(class_embs)
+        ind = torch.argmax(torch.norm(class_embs, 2, 1)).item()
+
+        mu = [class_embs[ind]]
+        centInds = [0.] * len(class_embs)
+        cent = 0
+
+        while len(mu) < len(class_embs):
+            if len(mu) == 1:
+                D2 = torch.cdist(mu[-1].view(1, -1), class_embs, 2)[0].cpu().numpy()
+            else:
+                newD = torch.cdist(mu[-1].view(1, -1), class_embs, 2)[0].cpu().numpy()
+                for i in range(len(class_embs)):
+                    if D2[i] > newD[i]:
+                        centInds[i] = cent
+                        D2[i] = newD[i]
+            print(str(len(mu)) + '\t' + str(sum(D2)), flush=True)
+            if sum(D2) == 0.0:
+                break
+
+            D2 = D2.ravel().astype(float)
+            Ddist = (D2 ** 2) / sum(D2 ** 2)
+            customDist = stats.rv_discrete(name='custm', values=(np.arange(len(D2)), Ddist))
+            ind = customDist.rvs(size=1)[0]
+            while ind in indsAll:
+                ind = customDist.rvs(size=1)[0]
+            mu.append(class_embs[ind])
+            indsAll.append(indices[ind])  # Append the index from 'indices' list
+            cent += 1
+
+        # Select one index from this class
+        indsAll.append(indices[ind])  # Append the index from 'indices' list
+
+    # Match the size of indsAll to labels
+    indsAll = indsAll[:len(labels)]
+
+    return indsAll
+
+
+
+
+
+
+def badge_sampling(opt, engine, train_dataset, labeled_data, unlabeled_data, train_data):
+    engine.model.eval()
+    embDim = 512
+    nLab = 44
+    len_unlabeled_data = len(unlabeled_data.dataset)
+    len_labeled_data = len(train_data.dataset)
+    embedding = np.zeros([len_unlabeled_data + len_labeled_data, embDim * nLab])
+
+    S_ij = {}
+
+    # Flatten the list of lists into a single list
+    unselected_ind_train_flat = [item for sublist in train_dataset.unselected_ind_train for item in sublist]
+
+    # Create new_index dictionary
+    new_index = {i: path for i, path in enumerate(unselected_ind_train_flat)}
+    counter = 0
+    labels = []
+
+    for index, (label, image, num_views, marks, train_path) in enumerate(unlabeled_data):
+        inputs = Variable(image).to(engine.device)
+        targets = Variable(label).to(engine.device)
+        B, V, C, H, W = inputs.shape
+        inputs = inputs.view(-1, C, H, W)
+        outputs, out, utilization = engine.model(B, V, num_views, inputs)
+        out = out.data.cpu().numpy()
+        batchProbs = F.softmax(outputs, dim=1).data.cpu().numpy()
+        maxInds = np.argmax(batchProbs, 1)
+        targets = torch.max(targets, 1)[1]
+        labels.extend(targets.cpu().numpy())
+        for j in range(len(targets)):
+            for c in range(nLab):
+                if c == maxInds[j]:
+                    embedding[counter][embDim * c: embDim * (c + 1)] = deepcopy(out[j]) * (1 - batchProbs[j][c])
+                else:
+                    embedding[counter][embDim * c: embDim * (c + 1)] = deepcopy(out[j]) * (-1 * batchProbs[j][c])
+            counter += 1
+
+            v_ij, predicted = outputs.max(1)
+            for i in range(len(predicted.data)):
+                tmp_class = np.array(predicted.data.cpu())[i]
+                tmp_index = counter
+                tmp_label = np.array(targets.data.cpu())[i]
+                tmp_value = np.array(v_ij.data.cpu())[i]
+
+                if tmp_index not in S_ij:
+                    S_ij[tmp_index] = []
+                S_ij[tmp_index].append([tmp_class, tmp_value, tmp_label])
+    labels = np.array(labels)
+    embedding = torch.Tensor(embedding)
+    queryIndex = init_centers(embedding, labels, 44)
+
+    queryLabelArr = []
+    for i in range(len(queryIndex)):
+        queryLabelArr.append(S_ij[queryIndex[i]][0][2])
+
+    queryLabelArr = np.array(queryLabelArr)
+
+
+    old_index_train = train_dataset.selected_ind_train
+    old_index_not_train = train_dataset.unselected_ind_train
+
+    for class_index in range(44):
+        if queryIndex[class_index]:
+            selected_path = queryIndex[class_index]
+            old_index_train[class_index].append(selected_path)
+            if selected_path in old_index_not_train[class_index]:
+                old_index_not_train[class_index].remove(selected_path)
 
     return old_index_train, old_index_not_train
 

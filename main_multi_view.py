@@ -258,7 +258,16 @@ if __name__ == '__main__':
                 unlabeled_data,
                 labeled_dataset)
 
-        if opt.QUERIES_STRATEGY == 'dissimilarity_sampling':
+        if opt.QUERIES_STRATEGY == 'BADGE_sampling':
+            selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.badge_sampling(
+                opt,
+                engine,
+                train_dataset,
+                labeled_data,
+                unlabeled_data,
+                train_data)
+
+        if opt.QUERIES_STRATEGY == 'certainty':
             selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.dissimilarity_sampling(
                 opt,
                 engine,
