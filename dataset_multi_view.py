@@ -53,7 +53,39 @@ class MultiViewDataset(Dataset):
         if unselected_ind_train is None and selected_ind_train is None and self.mode == 'train':
             self.selected_ind_train, self.unselected_ind_train = self.filter_selected_unselected(self.file_path)
 
+        self.data = []
+        for index in range(self.__len__()):
+            if self.mode == 'train':
+                path = self.selected_ind_train
+                split_setting = os.sep
+            else:
+                path = self.none_train_path
+                split_setting = "/"
 
+            class_name = path[index][0].split(split_setting)[-3]
+            class_id = self.classes.index(class_name)
+            label = torch.zeros(self.num_classes)
+            label[class_id] = 1.0
+            images = []
+            marks = torch.zeros(self.max_num_views)
+
+            for i in range(0, len(path[index])):
+                image_name = (path[index][i].strip().split(os.sep)[-1]).strip().split('.')[0]
+                marks[i] = int(image_name.strip().split('_')[-1])
+                if self.mode == 'train':
+                    image = Image.open(path[index][i]).convert('RGB')
+                else:
+                    image = Image.open(os.path.join(self.data_root, self.mode, path[index][i])).convert('RGB')
+
+                if self.transform:
+                    image = self.transform(image)
+
+                images.append(image)
+
+            for i in range(0, self.max_num_views - len(path[index])):
+                images.append(torch.zeros_like(images[0]))
+
+            self.data.append((label, torch.stack(images), len(path[index]), marks))
     def filter_selected_unselected(self, file_path):
         selected_ind_train = [[] for _ in range(len(file_path))]
         unselected_ind_train = [[] for _ in range(len(file_path))]
@@ -77,36 +109,38 @@ class MultiViewDataset(Dataset):
         else:
             return len(self.none_train_path)
 
+    # def __getitem__(self, index):
+    #     if self.mode == 'train':
+    #         path = self.selected_ind_train
+    #         split_setting = os.sep
+    #     else:
+    #         path = self.none_train_path
+    #         split_setting = "/"
+    #     # print(path[index][0])
+    #     class_name = path[index][0].split(split_setting)[-3]
+    #     class_id = self.classes.index(class_name)
+    #     label = torch.zeros(self.num_classes)
+    #     label[class_id] = 1.0
+    #     images = []
+    #     marks = torch.zeros(self.max_num_views)
+    #
+    #     for i in range(0, len(path[index])):
+    #         image_name = (path[index][i].strip().split(os.sep)[-1]).strip().split('.')[0]
+    #         marks[i] = int(image_name.strip().split('_')[-1])
+    #         if self.mode == 'train':
+    #             image = Image.open(path[index][i]).convert('RGB')
+    #         else:
+    #             image = Image.open(os.path.join(self.data_root, self.mode, path[index][i])).convert('RGB')
+    #
+    #         if self.transform:
+    #             image = self.transform(image)
+    #
+    #         images.append(image)
+    #
+    #     for i in range(0, self.max_num_views - len(path[index])):
+    #         images.append(torch.zeros_like(images[0]))
+    #
+    #     return label, torch.stack(images), len(path[index]), marks
+
     def __getitem__(self, index):
-        if self.mode == 'train':
-            path = self.selected_ind_train
-            split_setting = os.sep
-        else:
-            path = self.none_train_path
-            split_setting = "/"
-        # print(path[index][0])
-        class_name = path[index][0].split(split_setting)[-3]
-        class_id = self.classes.index(class_name)
-        label = torch.zeros(self.num_classes)
-        label[class_id] = 1.0
-        images = []
-        marks = torch.zeros(self.max_num_views)
-
-        for i in range(0, len(path[index])):
-            image_name = (path[index][i].strip().split(os.sep)[-1]).strip().split('.')[0]
-            marks[i] = int(image_name.strip().split('_')[-1])
-            if self.mode == 'train':
-                image = Image.open(path[index][i]).convert('RGB')
-            else:
-                image = Image.open(os.path.join(self.data_root, self.mode, path[index][i])).convert('RGB')
-
-            if self.transform:
-                image = self.transform(image)
-
-            images.append(image)
-
-        for i in range(0, self.max_num_views - len(path[index])):
-            images.append(torch.zeros_like(images[0]))
-
-        return label, torch.stack(images), len(path[index]), marks
-
+        return self.data[index]

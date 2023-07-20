@@ -218,7 +218,19 @@ if __name__ == '__main__':
                 engine,
                 train_dataset,
                 unlabeled_data,
-                labeled_dataset)
+                labeled_dataset,
+                train_data
+            )
+
+        if opt.QUERIES_STRATEGY == 'patch_based_selection':
+            selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.patch_based_selection(
+                opt,
+                engine,
+                train_dataset,
+                unlabeled_data,
+                labeled_dataset,
+                train_data
+            )
 
         if opt.QUERIES_STRATEGY == 'random':
             selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.random_sampling(opt,
