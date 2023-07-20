@@ -32,7 +32,22 @@ def patch_based_selection(opt, engine, train_dataset, unlabeled_data, labeled_da
     #
     input_size = model.default_cfg["input_size"][1]
     #
-
+    tome.patch.timm(model)
+    #
+    # # Run the model with no reduction (should be the same as before)
+    model.r = 0
+    x = model(img_tensor).topk(5).indices[0].tolist()
+    #
+    # Run the model with some reduction
+    # Only the least applicable class changed
+    model.r = 8
+    x = model(img_tensor).topk(5).indices[0].tolist()
+    #
+    # Run the model with a lot of reduction
+    # Top-3 most applicable classes didn't change (husky, Siberian husky, Alaskan malamute)
+    # But model is 2x faster now! See 1_benchmark_timm.ipynb
+    model.r = 16
+    model(img_tensor).topk(5).indices[0].tolist()
 
 
 
