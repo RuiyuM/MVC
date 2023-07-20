@@ -33,7 +33,7 @@ SV_MOMENTUM = 0.9
 SV_WEIGHT_DECAY = 1e-3
 SV_LR_INIT = 1e-2
 
-MV_EPOCHS = 10
+MV_EPOCHS = 1
 MV_QUERIES = 10
 QUERIES_STRATEGY = 'dissimilarity_sampling' # options: ['dissimilarity_sampling', 'uncertainty']
 

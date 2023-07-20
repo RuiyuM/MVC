@@ -17,15 +17,29 @@ from scipy.spatial.distance import cosine
 from sklearn.preprocessing import normalize
 import timm
 import tome
-
+from torchvision import transforms
+from torchvision.transforms.functional import InterpolationMode
+from PIL import Image
 
 
 
 def patch_based_selection(opt, engine, train_dataset, unlabeled_data, labeled_dataset, train_data):
     engine.model.eval()
+    model_name = "vit_base_patch16_224"
+
+    # Load a pretrained model
+    model = timm.create_model(model_name, pretrained=True)
+    #
+    input_size = model.default_cfg["input_size"][1]
+    #
+
+
+
+
+
+
 
     with torch.no_grad():
-        feature_dict_train = {i: {"features": []} for i in range(44)}
         for index, (label, image, num_views, marks) in enumerate(train_data):
             inputs = Variable(image).to(engine.device)
             targets = Variable(label).to(engine.device)
@@ -33,9 +47,7 @@ def patch_based_selection(opt, engine, train_dataset, unlabeled_data, labeled_da
             B, V, C, H, W = inputs.shape
             inputs = inputs.view(-1, C, H, W)
             outputs, features, utilization = engine.model(B, V, num_views, inputs)
-            for i in range(len(transform_targets)):
-                class_index = transform_targets[i].item()
-                feature_dict_train[class_index]["features"].append(features[i].detach().cpu().numpy())
+
 
     with torch.no_grad():
         feature_dict = {i: {"features": [], "path": []} for i in range(44)}

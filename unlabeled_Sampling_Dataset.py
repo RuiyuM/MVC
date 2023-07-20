@@ -10,7 +10,7 @@ import random
 
 class Unlabeled_Dataset(Dataset):
     def __init__(self, classes, num_classes, data_root, mode, max_num_views, selected_ind_train=None,
-                 unselected_ind_train=None):
+                 unselected_ind_train=None, transform=None):
         super(Unlabeled_Dataset, self).__init__()
 
         self.classes = classes
@@ -33,11 +33,12 @@ class Unlabeled_Dataset(Dataset):
                 for elements_ in files:
                     self.file_path[class_index].append(elements_)
 
-        self.transform = transforms.Compose([transforms.RandomHorizontalFlip(),
-                                             transforms.ToTensor(),
-                                             transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                                                  std=[0.229, 0.224, 0.225])
-                                             ])
+        if transform is None:
+            self.transform = transforms.Compose([
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+            ])
 
         if unselected_ind_train is None and selected_ind_train is None:
             self.selected_ind_train, self.unselected_ind_train = self.filter_selected_unselected(self.file_path)
@@ -99,10 +100,14 @@ class Unlabeled_Dataset(Dataset):
 
             images.append(image)
 
-        for i in range(0, self.max_num_views - end_point_setting):
-            images.append(torch.zeros_like(images[0]))
+        # for i in range(0, self.max_num_views - end_point_setting):
+        #     images.append(torch.zeros_like(images[0]))
+        # if self.mode == "labeled":
+        #     return label, torch.stack(images), len(path[index]), marks
+        # else:
+        #     return label, torch.stack(images), len(path[index]), marks, train_path
         if self.mode == "labeled":
-            return label, torch.stack(images), len(path[index]), marks
+            return label, images, len(path[index]), marks
         else:
-            return label, torch.stack(images), len(path[index]), marks, train_path
+            return label, images, len(path[index]), marks, train_path
 

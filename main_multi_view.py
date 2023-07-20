@@ -190,13 +190,15 @@ if __name__ == '__main__':
         unlabeled_sampling_unlabeled_data = [[item] for sublist in unlabeled_sampling_unlabeled_data for item in
                                              sublist]
 
+
+
         unlabeled_dataset = Unlabeled_Dataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'unlabeled',
                                               opt.MAX_NUM_VIEWS, unlabeled_sampling_labeled_data,
                                               unlabeled_sampling_unlabeled_data)
         unlabeled_data = DataLoader(unlabeled_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS,
                                     shuffle=True,
                                     pin_memory=True, worker_init_fn=tool.seed_worker)
-        # batch = next(iter(unlabeled_data))
+
 
         labeled_dataset = Unlabeled_Dataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'labeled',
                                             opt.MAX_NUM_VIEWS, unlabeled_sampling_labeled_data,
@@ -204,6 +206,7 @@ if __name__ == '__main__':
         labeled_data = DataLoader(labeled_dataset, batch_size=opt.TEST_MV_BS, num_workers=opt.NUM_WORKERS,
                                   shuffle=False,
                                   pin_memory=True, worker_init_fn=tool.seed_worker)
+        batch = next(iter(labeled_data))
 
         if opt.QUERIES_STRATEGY == 'uncertainty':
             selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.uncertainty_sampling(opt,
