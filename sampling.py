@@ -20,38 +20,48 @@ import tome
 from torchvision import transforms
 from torchvision.transforms.functional import InterpolationMode
 from PIL import Image
+from unlabeled_Sampling_Dataset import Unlabeled_Dataset
+from torch.utils.data import DataLoader
+import utils as tool
 
 
-
-def patch_based_selection(opt, engine, train_dataset, unlabeled_data, labeled_dataset, train_data):
-    engine.model.eval()
+def patch_based_selection(opt, engine, train_dataset, unlabeled_data, labeled_dataset, train_data,
+                          unlabeled_sampling_labeled_data,
+                          unlabeled_sampling_unlabeled_data):
     model_name = "vit_base_patch16_224"
 
     # Load a pretrained model
     model = timm.create_model(model_name, pretrained=True)
     #
-    input_size = model.default_cfg["input_size"][1]
-    #
     tome.patch.timm(model)
-    #
+
+    transform = transforms.Compose([
+        transforms.Resize(int((256 / 224) * opt.IMAGE_SIZE), interpolation=InterpolationMode.BICUBIC),
+        transforms.CenterCrop(opt.IMAGE_SIZE),
+        transforms.ToTensor(),
+        transforms.Normalize(model.default_cfg["mean"], model.default_cfg["std"]),
+    ])
     # # Run the model with no reduction (should be the same as before)
     model.r = 0
+    img = Image.open("./data/train/0000/0008/train_0000_0004_1.png")
+    img_tensor = transform(img)[None, ...]
     x = model(img_tensor).topk(5).indices[0].tolist()
-    #
-    # Run the model with some reduction
-    # Only the least applicable class changed
-    model.r = 8
-    x = model(img_tensor).topk(5).indices[0].tolist()
-    #
-    # Run the model with a lot of reduction
-    # Top-3 most applicable classes didn't change (husky, Siberian husky, Alaskan malamute)
-    # But model is 2x faster now! See 1_benchmark_timm.ipynb
-    model.r = 16
-    model(img_tensor).topk(5).indices[0].tolist()
 
 
+    unlabeled_dataset = Unlabeled_Dataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'unlabeled',
+                                          opt.MAX_NUM_VIEWS, unlabeled_sampling_labeled_data,
+                                          unlabeled_sampling_unlabeled_data)
+    unlabeled_data = DataLoader(unlabeled_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS,
+                                shuffle=True,
+                                pin_memory=True, worker_init_fn=tool.seed_worker)
 
-
+    labeled_dataset = Unlabeled_Dataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'labeled',
+                                        opt.MAX_NUM_VIEWS, unlabeled_sampling_labeled_data,
+                                        unlabeled_sampling_unlabeled_data)
+    labeled_data = DataLoader(labeled_dataset, batch_size=opt.TEST_MV_BS, num_workers=opt.NUM_WORKERS,
+                              shuffle=False,
+                              pin_memory=True, worker_init_fn=tool.seed_worker)
+    engine.model.eval()
 
 
     with torch.no_grad():
@@ -62,7 +72,6 @@ def patch_based_selection(opt, engine, train_dataset, unlabeled_data, labeled_da
             B, V, C, H, W = inputs.shape
             inputs = inputs.view(-1, C, H, W)
             outputs, features, utilization = engine.model(B, V, num_views, inputs)
-
 
     with torch.no_grad():
         feature_dict = {i: {"features": [], "path": []} for i in range(44)}
@@ -82,37 +91,12 @@ def patch_based_selection(opt, engine, train_dataset, unlabeled_data, labeled_da
                 feature_dict[class_index]["features"].append(features[i].detach().cpu().numpy())
                 feature_dict[class_index]["path"].append(train_path[i])
 
-        dissimilarity_dict = {i: {"dissimilarity": [], "path": []} for i in range(44)}
-
-        # Second pass: compute dissimilarities
-        for class_index in range(44):
-            if feature_dict[class_index]["features"]:
-                # Normalize features before computing mean
-                normalized_features_train = normalize(feature_dict_train[class_index]["features"])
-                normalized_features = normalize(feature_dict[class_index]["features"])
-
-                mean_features_train = np.mean(normalized_features_train, axis=0)  # Compute mean features of train data
-                for i, feature in enumerate(normalized_features):
-                    dissimilarity = cosine(feature, mean_features_train)  # Compute dissimilarity using cosine distance
-                    dissimilarity_dict[class_index]["dissimilarity"].append(dissimilarity)
-                    dissimilarity_dict[class_index]["path"].append(feature_dict[class_index]["path"][i])
 
         old_index_train = train_dataset.selected_ind_train
         old_index_not_train = train_dataset.unselected_ind_train
 
-        # Third pass: select most dissimilar samples
-        for class_index in range(44):
-            if dissimilarity_dict[class_index]["dissimilarity"]:
-                max_dissimilarity_index = np.argmax(dissimilarity_dict[class_index]["dissimilarity"])
-                most_dissimilar_path = dissimilarity_dict[class_index]["path"][max_dissimilarity_index]
-
-                old_index_train[class_index].append(most_dissimilar_path)
-
-                if most_dissimilar_path in old_index_not_train[class_index]:
-                    old_index_not_train[class_index].remove(most_dissimilar_path)
 
         return old_index_train, old_index_not_train
-
 
 
 def uncertainty_sampling(opt, engine, train_dataset, unlabeled_data, labeled_dataset):
@@ -120,8 +104,6 @@ def uncertainty_sampling(opt, engine, train_dataset, unlabeled_data, labeled_dat
     with torch.no_grad():
         entropy_dict = {i: {"entropy": [], "path": []} for i in
                         range(44)}  # Initialize the dictionary to store entropy and path for each class
-
-
 
         for index, (label, image, num_views, marks, train_path) in enumerate(unlabeled_data):
             inputs = Variable(image).to(engine.device)
@@ -158,9 +140,6 @@ def uncertainty_sampling(opt, engine, train_dataset, unlabeled_data, labeled_dat
                 old_index_not_train[class_index].remove(highest_entropy_path)
 
         return old_index_train, old_index_not_train
-
-
-
 
 
 def dissimilarity_sampling(opt, engine, train_dataset, unlabeled_data, labeled_dataset, train_data):
@@ -346,6 +325,7 @@ def LfOSA(opt, engine, train_dataset, unlabeled_data, labeled_dataset):
 
     return old_index_train, old_index_not_train
 
+
 # def LfOSA(opt, engine, train_dataset, unlabeled_data, labeled_dataset):
 #     engine.model.eval()
 #     path_dict = {i: [] for i in range(44)}
@@ -391,10 +371,10 @@ def LfOSA(opt, engine, train_dataset, unlabeled_data, labeled_dataset):
 #     return old_index_train, old_index_not_train
 
 
-
 def bayesian_generative_active_learning(opt, engine, train_dataset, unlabeled_data, labeled_dataset):
     engine.model.eval()
-    path_dict = {i: {"uncertainty": [], "path": []} for i in range(44)}  # Initialize the dictionary to store paths and uncertainties for each class
+    path_dict = {i: {"uncertainty": [], "path": []} for i in
+                 range(44)}  # Initialize the dictionary to store paths and uncertainties for each class
 
     with torch.no_grad():
         for index, (label, image, num_views, marks, train_path) in enumerate(unlabeled_data):
@@ -443,15 +423,12 @@ def compute_openmax_scores(activations, mavs, weibull_models, labels, known_clas
     return openmax_scores
 
 
-
-
 # Weibull CDF calculation
 def weibull_cdf(x, params):
-    return 1 - np.exp(-((x/params[0])**params[1]))
+    return 1 - np.exp(-((x / params[0]) ** params[1]))
 
 
-def open_max(opt, engine, labeled_dataset,train_dataset, unlabeled_data):
-
+def open_max(opt, engine, labeled_dataset, train_dataset, unlabeled_data):
     engine.model.eval()
 
     with torch.no_grad():
@@ -473,7 +450,8 @@ def open_max(opt, engine, labeled_dataset,train_dataset, unlabeled_data):
 
         mavs = {c: np.mean(features, axis=0) for c, features in features_dict.items()}
 
-        weibull_models = {c: {"distances": [], "params": [], "mean_distance": 0, "inv_std_distance": 0} for c in range(44)}
+        weibull_models = {c: {"distances": [], "params": [], "mean_distance": 0, "inv_std_distance": 0} for c in
+                          range(44)}
 
         def weibull_pdf(x, shape, scale):
             return (shape / scale) * (x / scale) ** (shape - 1) * np.exp(- (x / scale) ** shape)
@@ -506,7 +484,8 @@ def open_max(opt, engine, labeled_dataset,train_dataset, unlabeled_data):
             outputs, features, utilization = engine.model(B, V, num_views, inputs)
             transform_targets = torch.max(targets, 1)[1]
 
-            openmax_scores = compute_openmax_scores(features.detach().cpu().numpy(), mavs, weibull_models, transform_targets, 44)
+            openmax_scores = compute_openmax_scores(features.detach().cpu().numpy(), mavs, weibull_models,
+                                                    transform_targets, 44)
             score_index_pairs.extend(list(zip(openmax_scores, train_path, transform_targets.cpu().numpy())))
 
         # Sort the pairs in descending order of scores
@@ -588,7 +567,8 @@ def init_centers(X, labels, K):
     # Group embeddings by class
     grouped_embs = {c: [] for c in range(K)}
     for i, (emb, label) in enumerate(zip(embs, labels)):
-        grouped_embs[label].append((emb, i))  # Store the embedding and index as a tuple in the 'grouped_embs' dictionary
+        grouped_embs[label].append(
+            (emb, i))  # Store the embedding and index as a tuple in the 'grouped_embs' dictionary
 
     indsAll = []
     for c in range(K):
@@ -635,10 +615,6 @@ def init_centers(X, labels, K):
     indsAll = indsAll[:len(labels)]
 
     return indsAll
-
-
-
-
 
 
 def badge_sampling(opt, engine, train_dataset, labeled_data, unlabeled_data, train_data):
@@ -698,7 +674,6 @@ def badge_sampling(opt, engine, train_dataset, labeled_data, unlabeled_data, tra
 
     queryLabelArr = np.array(queryLabelArr)
 
-
     old_index_train = train_dataset.selected_ind_train
     old_index_not_train = train_dataset.unselected_ind_train
 
@@ -711,10 +686,12 @@ def badge_sampling(opt, engine, train_dataset, labeled_data, unlabeled_data, tra
 
     return old_index_train, old_index_not_train
 
+
 def certainty_sampling(opt, engine, train_dataset, unlabeled_data, labeled_dataset):
     engine.model.eval()
     with torch.no_grad():
-        certainty_dict = {i: {"certainty": [], "path": []} for i in range(44)}  # Initialize dictionary for certainty and path
+        certainty_dict = {i: {"certainty": [], "path": []} for i in
+                          range(44)}  # Initialize dictionary for certainty and path
 
         for index, (label, image, num_views, marks, train_path) in enumerate(unlabeled_data):
             inputs = Variable(image).to(engine.device)
@@ -737,7 +714,8 @@ def certainty_sampling(opt, engine, train_dataset, unlabeled_data, labeled_datas
         old_index_not_train = train_dataset.unselected_ind_train
 
         for class_index in range(44):
-            max_certainty_index = torch.argmax(torch.tensor(certainty_dict[class_index]["certainty"]))  # Get index of maximum certainty
+            max_certainty_index = torch.argmax(
+                torch.tensor(certainty_dict[class_index]["certainty"]))  # Get index of maximum certainty
             highest_certainty_path = certainty_dict[class_index]["path"][max_certainty_index]  # Get corresponding path
 
             # Append the highest_certainty_path to the corresponding sublist in old_index_train
@@ -748,4 +726,3 @@ def certainty_sampling(opt, engine, train_dataset, unlabeled_data, labeled_datas
                 old_index_not_train[class_index].remove(highest_certainty_path)
 
         return old_index_train, old_index_not_train
-

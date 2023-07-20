@@ -232,7 +232,9 @@ if __name__ == '__main__':
                 train_dataset,
                 unlabeled_data,
                 labeled_dataset,
-                train_data
+                train_data,
+                unlabeled_sampling_labeled_data,
+                unlabeled_sampling_unlabeled_data
             )
 
         if opt.QUERIES_STRATEGY == 'random':
