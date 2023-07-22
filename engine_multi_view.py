@@ -7,13 +7,13 @@ import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
-
+import pickle
 import utils as tool
-
+import parser_test as parser_2
 class MultiViewEngine(object):
     def __init__(self, model, train_data, valid_data, num_classes, optimizer, scheduler, criterion, weight_path, device, mv_type):
         super(MultiViewEngine, self).__init__()
-
+        self.opt = parser_2.get_parser()
         self.model = model
         self.train_data = train_data
         self.valid_data = valid_data
@@ -55,12 +55,12 @@ class MultiViewEngine(object):
             script = ('Epoch:[ %d | %d ]    Loss: %.4f    ') % (epoch + 1, epochs, total_loss)
             print(script)
 
-            # # evaluation
-            # with torch.no_grad():
-            #     overall_accuracy = self.valid()
-            #
-            # # save best model
-            # self.save_model_weights(epoch, overall_accuracy)
+            # evaluation
+            with torch.no_grad():
+                overall_accuracy = self.valid()
+
+            # save best model
+            self.save_model_weights(epoch, overall_accuracy)
 
             # get remaining time
             current_time = time.time()
@@ -91,12 +91,12 @@ class MultiViewEngine(object):
             script = ('Epoch:[ %d | %d ]    Loss: %.4f    ') % (epoch + 1, epochs, total_loss)
             print(script)
 
-            # #evaluation
-            # with torch.no_grad():
-            #     overall_accuracy = self.valid()
-            #
-            # # save best model
-            # self.save_model_weights(epoch, overall_accuracy)
+            #evaluation
+            with torch.no_grad():
+                overall_accuracy = self.valid()
+
+            # save best model
+            self.save_model_weights(epoch, overall_accuracy)
 
             # get remaining time
             current_time = time.time()
@@ -125,6 +125,25 @@ class MultiViewEngine(object):
 
         overall_accuracy = (all_correct_points.float() / all_points).cpu().data.numpy()
         print('MVA:', '%.2f' % (100 * overall_accuracy))
+
+        # assuming opt.MAX_NUM_VIEWS and opt.QUERIES_STRATEGY are defined
+        file_name = str(self.opt.MAX_NUM_VIEWS) + self.opt.QUERIES_STRATEGY + '.pickle'
+
+        # specify the directory
+        directory = './log_AL'
+
+        # create the directory if it doesn't exist
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+
+        # join the directory with the file name
+        file_path = os.path.join(directory, file_name)
+
+        # assuming overall_accuracy is defined
+        data = {'MVA': '%.2f' % (100 * overall_accuracy)}
+
+        with open(file_path, 'wb') as handle:
+            pickle.dump(data, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
         self.model.train()
 

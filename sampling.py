@@ -34,7 +34,7 @@ def patch_based_selection(opt, engine, train_dataset, unlabeled_data, labeled_da
     model = timm.create_model(model_name, pretrained=True)
     #
     tome.patch.timm(model)
-
+    model = model.to('cuda')
     transform = transforms.Compose([
         transforms.Resize(int((256 / 224) * opt.IMAGE_SIZE), interpolation=InterpolationMode.BICUBIC),
         transforms.CenterCrop(opt.IMAGE_SIZE),
@@ -43,60 +43,152 @@ def patch_based_selection(opt, engine, train_dataset, unlabeled_data, labeled_da
     ])
     # # Run the model with no reduction (should be the same as before)
     model.r = 0
-    img = Image.open("./data/train/0000/0008/train_0000_0004_1.png")
-    img_tensor = transform(img)[None, ...]
-    x = model(img_tensor).topk(5).indices[0].tolist()
 
 
-    unlabeled_dataset = Unlabeled_Dataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'unlabeled',
+    unlabeled_dataset = Unlabeled_Dataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'patched unlabeled',
                                           opt.MAX_NUM_VIEWS, unlabeled_sampling_labeled_data,
-                                          unlabeled_sampling_unlabeled_data)
+                                          unlabeled_sampling_unlabeled_data, transform)
     unlabeled_data = DataLoader(unlabeled_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS,
                                 shuffle=True,
                                 pin_memory=True, worker_init_fn=tool.seed_worker)
 
-    labeled_dataset = Unlabeled_Dataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'labeled',
+    labeled_dataset = Unlabeled_Dataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'patched labeled',
                                         opt.MAX_NUM_VIEWS, unlabeled_sampling_labeled_data,
-                                        unlabeled_sampling_unlabeled_data)
+                                        unlabeled_sampling_unlabeled_data, transform)
     labeled_data = DataLoader(labeled_dataset, batch_size=opt.TEST_MV_BS, num_workers=opt.NUM_WORKERS,
                               shuffle=False,
                               pin_memory=True, worker_init_fn=tool.seed_worker)
+    # batch = next(iter(labeled_data))
     engine.model.eval()
-
-
     with torch.no_grad():
-        for index, (label, image, num_views, marks) in enumerate(train_data):
+    # opt.NUM_CLASSES
+        label_metric_dict = {}
+
+        for index, (label, image, num_views, marks) in enumerate(labeled_data):
+            image = image.squeeze(1)
             inputs = Variable(image).to(engine.device)
+            # model(inputs)
+            model(inputs)
             targets = Variable(label).to(engine.device)
-            transform_targets = torch.max(targets, 1)[1]
-            B, V, C, H, W = inputs.shape
-            inputs = inputs.view(-1, C, H, W)
-            outputs, features, utilization = engine.model(B, V, num_views, inputs)
+            true_labels = torch.max(targets, 1)[1]
+            metrics = model._tome_info["metric"]
+            # print(len(metrics))
+            for i in range(true_labels.size(0)):
+                true_label = true_labels[i].item()  # Convert tensor to Python scalar
+                # For each list in metrics, take the i-th element and add to a new list
+                new_metric_list = [m_list[i] for m_list in metrics]
+                # Check if the label exists in the dictionary
+                if true_label not in label_metric_dict:
+                    label_metric_dict[true_label] = []
+                # Add new_metric_list to dictionary
+                label_metric_dict[true_label].append(new_metric_list)
 
-    with torch.no_grad():
-        feature_dict = {i: {"features": [], "path": []} for i in range(44)}
+        training_metric_label_dict = {}
 
-        # First pass: collect features and paths
         for index, (label, image, num_views, marks, train_path) in enumerate(unlabeled_data):
+            image = image.squeeze(1)
             inputs = Variable(image).to(engine.device)
+            model(inputs)
             targets = Variable(label).to(engine.device)
-            B, V, C, H, W = inputs.shape
-            inputs = inputs.view(-1, C, H, W)
-            outputs, features, utilization = engine.model(B, V, num_views, inputs)
+            true_labels = torch.max(targets, 1)[1]  # This is now a tensor of labels for the batch
 
-            transform_targets = torch.max(targets, 1)[1]
+            metrics = model._tome_info["metric"]  # This should be a tensor of metrics for the batch
 
-            for i in range(len(transform_targets)):
-                class_index = transform_targets[i].item()
-                feature_dict[class_index]["features"].append(features[i].detach().cpu().numpy())
-                feature_dict[class_index]["path"].append(train_path[i])
+            # Loop over the batch
+            for i in range(true_labels.size(0)):
+                true_label = true_labels[i].item()  # Convert tensor to Python scalar
+                # For each list in metrics, take the i-th element and add to a new list
+                new_metric_list = [m_list[i] for m_list in metrics]
+                path = train_path[i]  # Get the train path for this image
+                if true_label not in training_metric_label_dict:
+                    training_metric_label_dict[true_label] = []
+                # Add new_metric_list and train_path to dictionary
+                training_metric_label_dict[true_label].append([new_metric_list, path])
+
+        selected_path = calculate_similarity(label_metric_dict, training_metric_label_dict)
+
 
 
         old_index_train = train_dataset.selected_ind_train
         old_index_not_train = train_dataset.unselected_ind_train
 
+    for class_index in range(len(selected_path)):
+        # Get the path of the least similar image for this class
+        least_similar_path = selected_path[class_index][
+            0]  # Assuming the paths are sorted in ascending order of similarity
 
-        return old_index_train, old_index_not_train
+        # Append the least_similar_path to the corresponding sublist in old_index_train
+        old_index_train[class_index].append(least_similar_path)
+
+        # Remove the least_similar_path from the sublist in old_index_not_train at class_index
+        # Assuming old_index_not_train is a list of lists where each sublist corresponds to a class and contains the paths of the images for that class
+        if least_similar_path in old_index_not_train[class_index]:
+            old_index_not_train[class_index].remove(least_similar_path)
+
+    return old_index_train, old_index_not_train
+
+
+def calculate_similarity(label_metric_dict, training_metric_label_dict):
+    # This list will store lists of file paths for each class
+    selected_paths = [[] for _ in range(len(label_metric_dict))]
+
+    # Loop over each class
+    for true_label, label_metrics_list in label_metric_dict.items():
+        # Skip this class if it doesn't exist in training_metric_label_dict
+        if true_label not in training_metric_label_dict:
+            continue
+
+        # Loop over each sample in the unlabeled data for this class
+        for training_metric, path in training_metric_label_dict[true_label]:
+            # Normalize the metrics for unlabeled data
+            training_metric = [metric / metric.norm(dim=-1, keepdim=True) for metric in training_metric]
+
+            min_final_score = float('inf')
+
+            # Loop over each set of metrics for this class in the labeled data
+            for label_metrics in label_metrics_list:
+                # Normalize the metrics for labeled data
+                label_metrics = [metric / metric.norm(dim=-1, keepdim=True) for metric in label_metrics]
+
+                # Calculate scores
+                scores = [label_metric @ train_metric.transpose(-1, -2) for label_metric, train_metric in zip(label_metrics, training_metric)]
+
+                # Get the min over one dimension
+                scores = [score.min(dim=-1, keepdim=True)[0] for score in scores]
+
+                # Sum over one dimension
+                scores = [score.sum(dim=-1, keepdim=True) for score in scores]
+
+                # Sum over all metrics to get final score
+                final_score = sum(scores).sum().item()
+
+                # If this final score is smaller than the current minimum, update the minimum
+                if final_score < min_final_score:
+                    min_final_score = final_score
+
+            # Append the path and minimum final score to the list for this class
+            selected_paths[true_label].append((min_final_score, path))
+
+        # Sort the list for this class by score in ascending order
+        selected_paths[true_label].sort(key=lambda x: x[0])
+
+    # Only keep the paths, not the scores
+    selected_paths = [[path for score, path in class_list] for class_list in selected_paths]
+
+
+    return selected_paths
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 def uncertainty_sampling(opt, engine, train_dataset, unlabeled_data, labeled_dataset):

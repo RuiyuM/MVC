@@ -206,7 +206,7 @@ if __name__ == '__main__':
         labeled_data = DataLoader(labeled_dataset, batch_size=opt.TEST_MV_BS, num_workers=opt.NUM_WORKERS,
                                   shuffle=False,
                                   pin_memory=True, worker_init_fn=tool.seed_worker)
-        batch = next(iter(labeled_data))
+        # batch = next(iter(unlabeled_data))
 
         if opt.QUERIES_STRATEGY == 'uncertainty':
             selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.uncertainty_sampling(opt,
