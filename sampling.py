@@ -44,7 +44,6 @@ def patch_based_selection(opt, engine, train_dataset, unlabeled_data, labeled_da
     # # Run the model with no reduction (should be the same as before)
     model.r = 0
 
-
     unlabeled_dataset = Unlabeled_Dataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'patched unlabeled',
                                           opt.MAX_NUM_VIEWS, unlabeled_sampling_labeled_data,
                                           unlabeled_sampling_unlabeled_data, transform)
@@ -61,7 +60,7 @@ def patch_based_selection(opt, engine, train_dataset, unlabeled_data, labeled_da
     # batch = next(iter(labeled_data))
     engine.model.eval()
     with torch.no_grad():
-    # opt.NUM_CLASSES
+        # opt.NUM_CLASSES
         label_metric_dict = {}
 
         for index, (label, image, num_views, marks) in enumerate(labeled_data):
@@ -76,7 +75,7 @@ def patch_based_selection(opt, engine, train_dataset, unlabeled_data, labeled_da
             for i in range(true_labels.size(0)):
                 true_label = true_labels[i].item()  # Convert tensor to Python scalar
                 # For each list in metrics, take the i-th element and add to a new list
-                new_metric_list = [m_list[i] for m_list in metrics]
+                new_metric_list = [m_list[i][1:, :] for m_list in metrics]
                 # Check if the label exists in the dictionary
                 if true_label not in label_metric_dict:
                     label_metric_dict[true_label] = []
@@ -98,35 +97,110 @@ def patch_based_selection(opt, engine, train_dataset, unlabeled_data, labeled_da
             for i in range(true_labels.size(0)):
                 true_label = true_labels[i].item()  # Convert tensor to Python scalar
                 # For each list in metrics, take the i-th element and add to a new list
-                new_metric_list = [m_list[i] for m_list in metrics]
+                new_metric_list = [m_list[i][1:, :] for m_list in metrics]
                 path = train_path[i]  # Get the train path for this image
                 if true_label not in training_metric_label_dict:
                     training_metric_label_dict[true_label] = []
                 # Add new_metric_list and train_path to dictionary
                 training_metric_label_dict[true_label].append([new_metric_list, path])
 
-        selected_path = calculate_similarity(label_metric_dict, training_metric_label_dict)
-
-
+        selected_path = calculate_similarity_3(label_metric_dict, training_metric_label_dict)
 
         old_index_train = train_dataset.selected_ind_train
         old_index_not_train = train_dataset.unselected_ind_train
 
     for class_index in range(len(selected_path)):
-        # Get the path of the least similar image for this class
-        least_similar_path = selected_path[class_index][
-            0]  # Assuming the paths are sorted in ascending order of similarity
+        # Get the 10 least similar paths for this class
+        # Assuming the paths are sorted in ascending order of similarity
+        least_similar_paths = selected_path[class_index]
 
-        # Append the least_similar_path to the corresponding sublist in old_index_train
-        old_index_train[class_index].append(least_similar_path)
+        for least_similar_path in least_similar_paths:
+            # Append the least_similar_path to the corresponding sublist in old_index_train
+            old_index_train[class_index].append(least_similar_path)
 
-        # Remove the least_similar_path from the sublist in old_index_not_train at class_index
-        # Assuming old_index_not_train is a list of lists where each sublist corresponds to a class and contains the paths of the images for that class
-        if least_similar_path in old_index_not_train[class_index]:
-            old_index_not_train[class_index].remove(least_similar_path)
+            # Remove the least_similar_path from the sublist in old_index_not_train at class_index
+            # Assuming old_index_not_train is a list of lists where each sublist corresponds to a class and contains the paths of the images for that class
+            if least_similar_path in old_index_not_train[class_index]:
+                old_index_not_train[class_index].remove(least_similar_path)
 
     return old_index_train, old_index_not_train
 
+
+def calculate_similarity_3(label_metric_dict, training_metric_label_dict):
+    # This list will store lists of file paths for each class
+    selected_paths = [[] for _ in range(len(label_metric_dict))]
+
+    # Loop over each class
+    for true_label, label_metrics_list in label_metric_dict.items():
+        # Skip this class if it doesn't exist in training_metric_label_dict
+
+        if true_label not in training_metric_label_dict:
+            continue
+
+        # Loop over each sample in the unlabeled data for this class
+        for training_metric, path in training_metric_label_dict[true_label]:
+            # Normalize the metrics for unlabeled data
+            training_metric = [metric / metric.norm(dim=-1, keepdim=True) for metric in training_metric]
+
+            # min_final_score = float('inf')
+
+            current_score = 0
+            previous_indices = None
+            # Loop over each set of metrics for this class in the labeled data
+            for label_metrics in label_metrics_list:
+                # Normalize the metrics for labeled data
+                label_metrics = [metric / metric.norm(dim=-1, keepdim=True) for metric in label_metrics]
+
+                # Calculate scores
+                scores = [label_metric @ train_metric.transpose(-1, -2) for label_metric, train_metric in
+                          zip(label_metrics, training_metric)]
+
+                # Initialize the previous indices to None (this will be updated after the first iteration)
+
+
+                for i, score in enumerate(scores):
+                    # Calculate max along last dimension
+                    node_max, node_idx = score.max(dim=-1)
+
+                    # Get the indices that would sort the max values
+                    sorted_indices = torch.argsort(node_max, descending=True)
+
+                    # Get the top 70% indices
+                    top_70_percent = int(0.5 * len(sorted_indices))
+                    top_indices = sorted_indices[:top_70_percent]
+
+                    if i == 0:
+                        # If this is the first iteration, record the top indices
+                        previous_indices = top_indices
+                    else:
+                        # For subsequent iterations, find the intersection of top indices with previous indices
+                        previous_indices = torch.tensor(
+                            list(set(previous_indices.tolist()).intersection(set(top_indices.tolist()))))
+
+                # current_score.append([previous_indices, path])
+                # if previous_indices < current_score:
+                #     current_score = previous_indices
+                current_score += len(previous_indices)
+            selected_paths[true_label].append([current_score / len(label_metrics_list), path])
+
+    new_list = []
+
+    # loop through the list of classes
+    for paths in selected_paths:
+        # sort the list in descending order (highest first)
+        sorted_paths = sorted(paths, key=lambda x: x[0], reverse=True)
+
+        # select the 8 highest and 2 smallest and store their paths
+        selected_paths_for_class = sorted_paths[:7] + sorted_paths[-2:]
+
+        # extract the paths only
+        selected_paths_for_class = [path[1] for path in selected_paths_for_class]
+
+        new_list.append(selected_paths_for_class)
+
+    # new_list now contains the paths associated with the 8 highest and 2 smallest values for each class.
+
+    return new_list
 
 def calculate_similarity(label_metric_dict, training_metric_label_dict):
     # This list will store lists of file paths for each class
@@ -151,10 +225,11 @@ def calculate_similarity(label_metric_dict, training_metric_label_dict):
                 label_metrics = [metric / metric.norm(dim=-1, keepdim=True) for metric in label_metrics]
 
                 # Calculate scores
-                scores = [label_metric @ train_metric.transpose(-1, -2) for label_metric, train_metric in zip(label_metrics, training_metric)]
+                scores = [label_metric @ train_metric.transpose(-1, -2) for label_metric, train_metric in
+                          zip(label_metrics, training_metric)]
 
                 # Get the min over one dimension
-                scores = [score.min(dim=-1, keepdim=True)[0] for score in scores]
+                scores = [score.max(dim=-1, keepdim=True)[0] for score in scores]
 
                 # Sum over one dimension
                 scores = [score.sum(dim=-1, keepdim=True) for score in scores]
@@ -175,20 +250,67 @@ def calculate_similarity(label_metric_dict, training_metric_label_dict):
     # Only keep the paths, not the scores
     selected_paths = [[path for score, path in class_list] for class_list in selected_paths]
 
-
     return selected_paths
 
 
+def calculate_similarity_v2(label_metric_dict, training_metric_label_dict, threshold=0.55, top_k=4):
+    # This list will store lists of file paths for each class
+    selected_paths = [[] for _ in range(len(label_metric_dict))]
+    all_scores = [[] for _ in range(len(label_metric_dict))]
+    # Loop over each class
+    max_self_scores = [[] for _ in range(len(label_metric_dict))]
+    for true_label, label_metrics_list in label_metric_dict.items():
+        # Skip this class if it doesn't exist in training_metric_label_dict
+        if true_label not in training_metric_label_dict:
+            continue
 
 
+        # calculate max_self_scores
+        for label_metrics in label_metrics_list:
+            label_metrics = [metric / metric.norm(dim=-1, keepdim=True) for metric in label_metrics]
+            self_scores = [label_metric @ label_metric.transpose(-1, -2) for label_metric in label_metrics]
+            max_self_scores[true_label].append(self_scores)
 
 
+        # Loop over each sample in the unlabeled data for this class
+        for training_metric, path in training_metric_label_dict[true_label]:
+            # Normalize the metrics for unlabeled data
+            training_metric = [metric / metric.norm(dim=-1, keepdim=True) for metric in training_metric]
 
 
+            # Loop over each set of metrics for this class in the labeled data
+            for label_metrics in label_metrics_list:
+                # Normalize the metrics for labeled data
+                label_metrics = [metric / metric.norm(dim=-1, keepdim=True) for metric in label_metrics]
+
+                # Calculate scores
+                scores = [label_metric @ train_metric.transpose(-1, -2) for label_metric, train_metric in
+                          zip(label_metrics, training_metric)]
+
+                # # calculate cosine similarity
+                # cosine_similarity_scores = []
+                # for i in range(len(max_self_scores)):
+                #     cosine_similarity = torch.nn.functional.cosine_similarity(max_self_scores[i], scores[i], dim=0)
+                #     cosine_similarity_scores.append(cosine_similarity)
+                all_scores[true_label].append([scores, path])
+
+    # starting calculate the cons similarity
+    current_label_similar = []
+    for true_label in range(len(max_self_scores)):
+        per_label = []
+        for needed_training in all_scores[true_label]:
+            cosine_scores = []
+            for element in max_self_scores[true_label]:
+                current_simi = []
+                for i in range(len(element)):
+                    cosine_similarity = torch.nn.functional.cosine_similarity(needed_training[0][i], element[i], dim=0)
+                    current_simi.append(cosine_similarity)
+                cosine_scores.append([current_simi, needed_training[1]])
+            per_label.append(cosine_scores)
+        current_label_similar.append(per_label)
 
 
-
-
+    return selected_paths
 
 
 def uncertainty_sampling(opt, engine, train_dataset, unlabeled_data, labeled_dataset):
