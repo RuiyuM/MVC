@@ -191,7 +191,7 @@ def calculate_similarity_3(label_metric_dict, training_metric_label_dict):
         sorted_paths = sorted(paths, key=lambda x: x[0], reverse=True)
 
         # select the 8 highest and 2 smallest and store their paths
-        selected_paths_for_class = sorted_paths[:7] + sorted_paths[-2:]
+        selected_paths_for_class = sorted_paths[:9]
 
         # extract the paths only
         selected_paths_for_class = [path[1] for path in selected_paths_for_class]
