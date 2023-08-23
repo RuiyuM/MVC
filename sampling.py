@@ -6,6 +6,7 @@ from sklearn.mixture import GaussianMixture
 from scipy.spatial import distance
 from scipy.optimize import minimize
 from sklearn.metrics import pairwise_distances_argmin_min
+from scipy.optimize import linear_sum_assignment
 from sklearn.cluster import KMeans
 from sklearn.metrics import pairwise_distances
 from sklearn.metrics.pairwise import euclidean_distances
@@ -104,7 +105,7 @@ def patch_based_selection(opt, engine, train_dataset, unlabeled_data, labeled_da
                 # Add new_metric_list and train_path to dictionary
                 training_metric_label_dict[true_label].append([new_metric_list, path])
 
-        selected_path = calculate_similarity_3(label_metric_dict, training_metric_label_dict)
+        selected_path = calculate_similarity_bipartite(label_metric_dict, training_metric_label_dict)
 
         old_index_train = train_dataset.selected_ind_train
         old_index_not_train = train_dataset.unselected_ind_train
@@ -124,6 +125,62 @@ def patch_based_selection(opt, engine, train_dataset, unlabeled_data, labeled_da
                 old_index_not_train[class_index].remove(least_similar_path)
 
     return old_index_train, old_index_not_train
+
+
+
+def calculate_similarity_bipartite(label_metric_dict, training_metric_label_dict):
+    selected_paths = [[] for _ in range(len(label_metric_dict))]
+
+    for true_label, label_metrics_list in label_metric_dict.items():
+        if true_label not in training_metric_label_dict:
+            continue
+
+        for training_metrics, path in training_metric_label_dict[true_label]:
+            current_min_cost = float('inf')
+
+            # Loop over each set of metrics for this class in the labeled data
+            for label_metrics in label_metrics_list:
+                cost_matrix = torch.zeros((len(label_metrics), len(training_metrics)), device='cuda')
+
+                # Iterate through the 12 sublists in label_metrics and training_metrics
+                for i, label_metric in enumerate(label_metrics):
+                    label_metric_tensor = torch.tensor(label_metric).cuda()
+                    for j, train_metric in enumerate(training_metrics):
+                        train_metric_tensor = torch.tensor(train_metric).cuda()
+                        cost_matrix[i, j] = torch.norm(label_metric_tensor - train_metric_tensor)
+
+                # Convert the cost_matrix to a NumPy array for linear_sum_assignment
+                cost_matrix_np = cost_matrix.cpu().numpy()
+
+                # Apply linear_sum_assignment to find the optimal correspondence
+                row_ind, col_ind = linear_sum_assignment(cost_matrix_np)
+
+                # Calculate the total cost for this correspondence
+                total_cost = cost_matrix_np[row_ind, col_ind].sum()
+
+                # Update the current_min_cost if this total_cost is smaller
+                if total_cost < current_min_cost:
+                    current_min_cost = total_cost
+
+            # Append the minimum cost and associated path for this unlabeled sample
+            selected_paths[true_label].append([current_min_cost, path])
+
+    new_list = []
+
+    # Loop through the list of classes
+    for paths in selected_paths:
+        # Sort the list in descending order (highest first)
+        sorted_paths = sorted(paths, key=lambda x: x[0], reverse=True)
+
+        # Select the top 10 biggest and store their paths
+        selected_paths_for_class = sorted_paths[:10]
+
+        # Extract the paths only
+        selected_paths_for_class = [path[1] for path in selected_paths_for_class]
+
+        new_list.append(selected_paths_for_class)
+
+    return new_list
 
 
 def calculate_similarity_3(label_metric_dict, training_metric_label_dict):
