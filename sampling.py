@@ -127,6 +127,84 @@ def patch_based_selection(opt, engine, train_dataset, unlabeled_data, labeled_da
     return old_index_train, old_index_not_train
 
 
+def patch_based_selection_DAN(opt, engine, train_dataset, unlabeled_data, labeled_dataset, train_data,
+                          unlabeled_sampling_labeled_data,
+                          unlabeled_sampling_unlabeled_data):
+    engine.model.eval()
+    label_metric_dict = {}
+    with torch.no_grad():
+
+        for index, (label, image, num_views, marks) in enumerate(train_data):
+            inputs = Variable(image).to(engine.device)
+            targets = Variable(label).to(engine.device)
+            true_labels = torch.max(targets, 1)[1]
+
+            B, V, C, H, W = inputs.shape
+            inputs = inputs.view(-1, C, H, W)
+            outputs, features, utilization = engine.model(B, V, num_views, inputs)
+            batch_size, token_dimension = features.shape
+            metrics = engine.model.k_value.reshape(len(true_labels), token_dimension)
+
+            for i in range(true_labels.size(0)):
+                true_label = true_labels[i].item()  # Convert tensor to Python scalar
+                # For each list in metrics, take the i-th element and add to a new list
+                new_metric_list = metrics[i]
+                # Check if the label exists in the dictionary
+                if true_label not in label_metric_dict:
+                    label_metric_dict[true_label] = []
+                # Add new_metric_list to dictionary
+                label_metric_dict[true_label].append(new_metric_list)
+
+    with torch.no_grad():
+        training_metric_label_dict = {}
+
+        # First pass: collect features and paths
+        for index, (label, image, num_views, marks, train_path) in enumerate(unlabeled_data):
+            inputs = Variable(image).to(engine.device)
+            targets = Variable(label).to(engine.device)
+            B, V, C, H, W = inputs.shape
+            inputs = inputs.view(-1, C, H, W)
+            outputs, features, utilization = engine.model(B, V, num_views, inputs)
+
+            true_labels = torch.max(targets, 1)[1]  # This is now a tensor of labels for the batch
+
+            batch_size, token_dimension = features.shape
+            metrics = engine.model.k_value.reshape(len(true_labels), token_dimension)
+
+            # Loop over the batch
+            for i in range(true_labels.size(0)):
+                true_label = true_labels[i].item()  # Convert tensor to Python scalar
+                # For each list in metrics, take the i-th element and add to a new list
+                new_metric_list = metrics[i]
+                path = train_path[i]  # Get the train path for this image
+                if true_label not in training_metric_label_dict:
+                    training_metric_label_dict[true_label] = []
+                # Add new_metric_list and train_path to dictionary
+                training_metric_label_dict[true_label].append([new_metric_list, path])
+
+
+
+        selected_path = calculate_similarity_bipartite(label_metric_dict, training_metric_label_dict)
+
+        old_index_train = train_dataset.selected_ind_train
+        old_index_not_train = train_dataset.unselected_ind_train
+
+    for class_index in range(len(selected_path)):
+        # Get the 10 least similar paths for this class
+        # Assuming the paths are sorted in ascending order of similarity
+        least_similar_paths = selected_path[class_index]
+
+        for least_similar_path in least_similar_paths:
+            # Append the least_similar_path to the corresponding sublist in old_index_train
+            old_index_train[class_index].append(least_similar_path)
+
+            # Remove the least_similar_path from the sublist in old_index_not_train at class_index
+            # Assuming old_index_not_train is a list of lists where each sublist corresponds to a class and contains the paths of the images for that class
+            if least_similar_path in old_index_not_train[class_index]:
+                old_index_not_train[class_index].remove(least_similar_path)
+
+    return old_index_train, old_index_not_train
+
 
 def calculate_similarity_bipartite(label_metric_dict, training_metric_label_dict):
     selected_paths = [[] for _ in range(len(label_metric_dict))]
@@ -142,12 +220,23 @@ def calculate_similarity_bipartite(label_metric_dict, training_metric_label_dict
             for label_metrics in label_metrics_list:
                 cost_matrix = torch.zeros((len(label_metrics), len(training_metrics)), device='cuda')
 
-                # Iterate through the 12 sublists in label_metrics and training_metrics
-                for i, label_metric in enumerate(label_metrics):
-                    label_metric_tensor = torch.tensor(label_metric).cuda()
-                    for j, train_metric in enumerate(training_metrics):
-                        train_metric_tensor = torch.tensor(train_metric).cuda()
-                        cost_matrix[i, j] = torch.norm(label_metric_tensor - train_metric_tensor)
+
+                # cost_matrix = torch.norm(label_metrics - training_metrics)
+                # Assuming label_metrics and training_metrics are your input tensors
+                # Normalize label_metrics
+                # Normalize label_metrics for 1D tensor
+                normalized_label_metrics = F.normalize(label_metrics, p=2, dim=0)
+
+                # Element-wise L2 normalization for training_metrics
+                normalized_training_metrics = F.normalize(training_metrics, p=2, dim=0)
+
+                # Compute cosine similarity
+                # Compute pairwise similarity matrix
+                vec1 = normalized_label_metrics.view(512, 1)
+                vec2 = normalized_training_metrics.view(1, 512)
+
+                # Step 2: Compute Pairwise Similarity
+                cost_matrix = torch.matmul(vec1, vec2)
 
                 # Convert the cost_matrix to a NumPy array for linear_sum_assignment
                 cost_matrix_np = cost_matrix.cpu().numpy()
@@ -173,12 +262,13 @@ def calculate_similarity_bipartite(label_metric_dict, training_metric_label_dict
         sorted_paths = sorted(paths, key=lambda x: x[0], reverse=True)
 
         # Select the top 10 biggest and store their paths
-        selected_paths_for_class = sorted_paths[:10]
+        selected_paths_for_class = sorted_paths[0]
 
         # Extract the paths only
         selected_paths_for_class = [path[1] for path in selected_paths_for_class]
 
         new_list.append(selected_paths_for_class)
+        print(new_list)
 
     return new_list
 

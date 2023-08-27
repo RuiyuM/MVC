@@ -226,7 +226,7 @@ if __name__ == '__main__':
             )
 
         if opt.QUERIES_STRATEGY == 'patch_based_selection':
-            selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.patch_based_selection(
+            selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.patch_based_selection_DAN(
                 opt,
                 engine,
                 train_dataset,

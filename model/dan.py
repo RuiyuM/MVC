@@ -62,7 +62,7 @@ class MultiHeadAttention(nn.Module):
         outputs = self.dropout(self.fc(outputs))
         outputs = self.layer_norm(outputs + residual)
 
-        return outputs, attention
+        return outputs, attention, k
 
 class FeedForward(nn.Module):
     def __init__(self, d_in, d_hidden, dropout=0.1):
@@ -92,10 +92,10 @@ class EncoderLayer(nn.Module):
         self.ffn = FeedForward(d_model, d_inner, dropout=dropout)
 
     def forward(self, x):
-        y, attention = self.attention(x, x, x)
+        y, attention, k = self.attention(x, x, x)
         y = self.ffn(y)
 
-        return y, attention
+        return y, attention, k
 
 class Encoder(nn.Module):
     def __init__(self, h, d_model, d_q, d_k, d_v, num_heads, d_inner, dropout):
@@ -106,11 +106,13 @@ class Encoder(nn.Module):
     def forward(self, x):
         attention_list = []
         outputs = x
+        k_list = []  # To store k values from each layer
         for encoder_layer in self.layer_stack:
-            outputs, attention = encoder_layer(outputs)
+            outputs, attention, k = encoder_layer(outputs)  # Capture returned k
             attention_list += [attention]
+            k_list += [k]  # Store k
 
-        return outputs, attention_list
+        return outputs, attention_list, k_list
 
 class DAN(nn.Module):
     def __init__(self, model, h, feature_dim, num_heads, inner_dim, dropout):
@@ -124,18 +126,23 @@ class DAN(nn.Module):
         self.d_inner = inner_dim
         self.dropout = dropout
         self.encoder = Encoder(self.h, self.d_view_feature, self.d_view_feature, self.d_view_feature, self.d_view_feature, self.num_heads, self.d_inner, self.dropout)
+        self.k_value = []
 
     def forward(self, batch_size, max_num_views, num_views, x):
         y = self.extractor(x)
         k = []
         u = []
         count = 0
+        k_value_list = []
+
         for i in range(0, batch_size):
             z = y[count:(count + max_num_views), :, :, :]
             count += max_num_views
             z = z[0:num_views[i], :, :, :]
             z = z.view(z.shape[0], -1)
-            z, attention_list = self.encoder(z)
+            z, attention_list, k_list = self.encoder(z)  # Capture returned k_list
+            k_temp = k_list[-1].permute(1, 0, 2).contiguous()  # Get the last k
+            k_value_list.append(k_temp)
 
             if not self.training:
                 utilization = torch.zeros(max_num_views)
@@ -148,6 +155,8 @@ class DAN(nn.Module):
 
             z = torch.max(z, 0)[0]
             k.append(z)
+
+        self.k_value = torch.stack(k_value_list)
 
         k = torch.stack(k) # batch_size * num_features
         if self.training:
