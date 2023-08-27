@@ -142,7 +142,9 @@ class DAN(nn.Module):
             z = z.view(z.shape[0], -1)
             z, attention_list, k_list = self.encoder(z)  # Capture returned k_list
             k_temp = k_list[-1].permute(1, 0, 2).contiguous()  # Get the last k
-            k_value_list.append(k_temp)
+            zero_tensor = torch.zeros((max_num_views, 1, 512), dtype=torch.float)
+            zero_tensor[:num_views[i], :, :] = k_temp
+            k_value_list.append(zero_tensor)
 
             if not self.training:
                 utilization = torch.zeros(max_num_views)

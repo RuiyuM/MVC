@@ -143,7 +143,7 @@ def patch_based_selection_DAN(opt, engine, train_dataset, unlabeled_data, labele
             inputs = inputs.view(-1, C, H, W)
             outputs, features, utilization = engine.model(B, V, num_views, inputs)
             batch_size, token_dimension = features.shape
-            metrics = engine.model.k_value.reshape(len(true_labels), token_dimension)
+            metrics = engine.model.k_value.reshape(len(true_labels), opt.MAX_NUM_VIEWS, token_dimension)
 
             for i in range(true_labels.size(0)):
                 true_label = true_labels[i].item()  # Convert tensor to Python scalar
@@ -169,7 +169,7 @@ def patch_based_selection_DAN(opt, engine, train_dataset, unlabeled_data, labele
             true_labels = torch.max(targets, 1)[1]  # This is now a tensor of labels for the batch
 
             batch_size, token_dimension = features.shape
-            metrics = engine.model.k_value.reshape(len(true_labels), token_dimension)
+            metrics = engine.model.k_value.reshape(len(true_labels), opt.MAX_NUM_VIEWS, token_dimension)
 
             # Loop over the batch
             for i in range(true_labels.size(0)):
@@ -194,14 +194,14 @@ def patch_based_selection_DAN(opt, engine, train_dataset, unlabeled_data, labele
         # Assuming the paths are sorted in ascending order of similarity
         least_similar_paths = selected_path[class_index]
 
-        for least_similar_path in least_similar_paths:
+        # for least_similar_path in least_similar_paths:
             # Append the least_similar_path to the corresponding sublist in old_index_train
-            old_index_train[class_index].append(least_similar_path)
+        old_index_train[class_index].append(least_similar_paths)
 
             # Remove the least_similar_path from the sublist in old_index_not_train at class_index
             # Assuming old_index_not_train is a list of lists where each sublist corresponds to a class and contains the paths of the images for that class
-            if least_similar_path in old_index_not_train[class_index]:
-                old_index_not_train[class_index].remove(least_similar_path)
+        if least_similar_paths in old_index_not_train[class_index]:
+                old_index_not_train[class_index].remove(least_similar_paths)
 
     return old_index_train, old_index_not_train
 
@@ -225,6 +225,8 @@ def calculate_similarity_bipartite(label_metric_dict, training_metric_label_dict
                 # Assuming label_metrics and training_metrics are your input tensors
                 # Normalize label_metrics
                 # Normalize label_metrics for 1D tensor
+                label_metrics = label_metrics.reshape(-1)
+                training_metrics = training_metrics.reshape(-1)
                 normalized_label_metrics = F.normalize(label_metrics, p=2, dim=0)
 
                 # Element-wise L2 normalization for training_metrics
@@ -232,8 +234,8 @@ def calculate_similarity_bipartite(label_metric_dict, training_metric_label_dict
 
                 # Compute cosine similarity
                 # Compute pairwise similarity matrix
-                vec1 = normalized_label_metrics.view(512, 1)
-                vec2 = normalized_training_metrics.view(1, 512)
+                vec1 = normalized_label_metrics.view(len(normalized_label_metrics), 1)
+                vec2 = normalized_training_metrics.view(1, len(normalized_training_metrics))
 
                 # Step 2: Compute Pairwise Similarity
                 cost_matrix = torch.matmul(vec1, vec2)
@@ -265,7 +267,7 @@ def calculate_similarity_bipartite(label_metric_dict, training_metric_label_dict
         selected_paths_for_class = sorted_paths[0]
 
         # Extract the paths only
-        selected_paths_for_class = [path[1] for path in selected_paths_for_class]
+        selected_paths_for_class = selected_paths_for_class[1]
 
         new_list.append(selected_paths_for_class)
         print(new_list)

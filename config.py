@@ -24,7 +24,7 @@ ARCHITECTURE = "RESNET18"
 FEATURE_DIM = 512
 
 # Define train/test hyper-parameters
-NUM_WORKERS = 1
+NUM_WORKERS = 4
 
 SV_EPOCHS = 30
 TRAIN_SV_BS = 128
