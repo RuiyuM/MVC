@@ -270,8 +270,8 @@ def calculate_similarity_bipartite(label_metric_dict, training_metric_label_dict
         selected_paths_for_class = selected_paths_for_class[1]
 
         new_list.append(selected_paths_for_class)
-        print(new_list)
 
+    print(new_list)
     return new_list
 
 
