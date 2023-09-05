@@ -15,6 +15,10 @@ def get_parser():
     parser.add_argument('-IMAGE_SIZE', type=int, default=cfg.IMAGE_SIZE)
     parser.add_argument('-MV_QUERIES', type=int, default=cfg.MV_QUERIES)
     parser.add_argument('-QUERIES_STRATEGY', type=str, default=cfg.QUERIES_STRATEGY)
+    parser.add_argument('-DATA_SET', type=str, default=cfg.DATA_SET)
+    parser.add_argument('-nb_classes', type=str, default=cfg.nb_classes)
+    parser.add_argument('-view_num', type=str, default=cfg.view_num)
+
 
 
     parser.add_argument('-ARCHITECTURE', type=str, default=cfg.ARCHITECTURE)

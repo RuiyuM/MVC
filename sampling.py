@@ -206,6 +206,31 @@ def patch_based_selection_DAN(opt, engine, train_dataset, unlabeled_data, labele
     return old_index_train, old_index_not_train
 
 
+def calculate_distance(x, y):
+    # Initialize variables to store the sum of minimum distances
+    sum_min_distance_xy = 0
+    sum_min_distance_yx = 0
+
+    # Number of feature vectors in each set
+    n_x = x.shape[0]
+    n_y = y.shape[0]
+
+    # Calculate the sum of minimum distances from x to y
+    for i in range(n_x):
+        min_distance = np.min(np.linalg.norm(y - x[i], axis=1))
+        sum_min_distance_xy += min_distance
+
+    # Calculate the sum of minimum distances from y to x
+    for j in range(n_y):
+        min_distance = np.min(np.linalg.norm(x - y[j], axis=1))
+        sum_min_distance_yx += min_distance
+
+    # Calculate the final distance
+    distance = (sum_min_distance_xy / (2 * n_y)) + (sum_min_distance_yx / (2 * n_x))
+
+    return distance
+
+
 def calculate_similarity_bipartite(label_metric_dict, training_metric_label_dict):
     selected_paths = [[] for _ in range(len(label_metric_dict))]
 
@@ -218,13 +243,10 @@ def calculate_similarity_bipartite(label_metric_dict, training_metric_label_dict
 
             # Loop over each set of metrics for this class in the labeled data
             for label_metrics in label_metrics_list:
-                cost_matrix = torch.zeros((len(label_metrics), len(training_metrics)), device='cuda')
+                # cost_matrix = torch.zeros((len(label_metrics), len(training_metrics)), device='cuda')
 
+                cost_distance = calculate_distance(label_metrics, training_metrics)
 
-                # cost_matrix = torch.norm(label_metrics - training_metrics)
-                # Assuming label_metrics and training_metrics are your input tensors
-                # Normalize label_metrics
-                # Normalize label_metrics for 1D tensor
                 label_metrics = label_metrics.reshape(-1)
                 training_metrics = training_metrics.reshape(-1)
                 normalized_label_metrics = F.normalize(label_metrics, p=2, dim=0)

@@ -28,7 +28,9 @@ from loss import LabelCrossEntropy
 from engine_single_view import SingleViewEngine
 from engine_multi_view import MultiViewEngine
 import sampling
-
+from dataset import MVDataSet
+import torchvision.transforms as transforms
+from transforms import *
 if __name__ == '__main__':
     # set options
     opt = parser_2.get_parser()
@@ -53,29 +55,29 @@ if __name__ == '__main__':
     # set device
     device = torch.device(opt.DEVICE if torch.cuda.is_available() else 'cpu')
 
-    # define model
+    # # define model
     model_stage1 = SVCNN(opt.NUM_CLASSES, opt.ARCHITECTURE, opt.FEATURE_DIM, pretrained=True).to(device)
-
-    # define dataset
-    train_dataset = SingleViewDataset(opt.CLASSES, opt.GROUPS, opt.NUM_CLASSES, opt.DATA_ROOT, 'train', opt.SV_TYPE,
-                                      use_train=True)
-    if opt.MV_FLAG == 'TRAIN':
-        cprint('*' * 15 + ' Stage 1 ' + '*' * 15, 'yellow')
-        print('Number of Training Images:', len(train_dataset))
-
-    train_data = DataLoader(train_dataset, batch_size=opt.TRAIN_SV_BS, num_workers=opt.NUM_WORKERS, shuffle=True,
-                            pin_memory=True, worker_init_fn=tool.seed_worker)
-
-    # define optimizer
-    optimizer = optim.SGD(model_stage1.parameters(), lr=opt.SV_LR_INIT, weight_decay=opt.SV_WEIGHT_DECAY,
-                          momentum=opt.SV_MOMENTUM)
-
-    # define criterion
+    #
+    # # define dataset
+    # train_dataset = SingleViewDataset(opt.CLASSES, opt.GROUPS, opt.NUM_CLASSES, opt.DATA_ROOT, 'train', opt.SV_TYPE,
+    #                                   use_train=True)
+    # if opt.MV_FLAG == 'TRAIN':
+    #     cprint('*' * 15 + ' Stage 1 ' + '*' * 15, 'yellow')
+    #     print('Number of Training Images:', len(train_dataset))
+    #
+    # train_data = DataLoader(train_dataset, batch_size=opt.TRAIN_SV_BS, num_workers=opt.NUM_WORKERS, shuffle=True,
+    #                         pin_memory=True, worker_init_fn=tool.seed_worker)
+    #
+    # # define optimizer
+    # optimizer = optim.SGD(model_stage1.parameters(), lr=opt.SV_LR_INIT, weight_decay=opt.SV_WEIGHT_DECAY,
+    #                       momentum=opt.SV_MOMENTUM)
+    #
+    # # define criterion
     criterion = LabelCrossEntropy()
-
-    # define engine
-    engine = SingleViewEngine(model_stage1, train_data, None, opt.NUM_CLASSES, opt.GROUPS, optimizer, opt.SV_TYPE,
-                              criterion, opt.SV_WEIGHT_PATH, opt.SV_OUTPUT_PATH, device, single_view=False)
+    #
+    # # define engine
+    # engine = SingleViewEngine(model_stage1, train_data, None, opt.NUM_CLASSES, opt.GROUPS, optimizer, opt.SV_TYPE,
+    #                           criterion, opt.SV_WEIGHT_PATH, opt.SV_OUTPUT_PATH, device, single_view=False)
 
     # run single view
     # if opt.MV_FLAG == 'TRAIN':
@@ -107,27 +109,85 @@ if __name__ == '__main__':
         model_stage2.eval()
 
     # define dataset
-    train_dataset = MultiViewDataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'train', opt.MAX_NUM_VIEWS,
-                                     use_train=True)
-    # dataloader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-    # batch = next(iter(dataloader))
-    valid_dataset = MultiViewDataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'valid', opt.MAX_NUM_VIEWS,
-                                     use_train=False)
-    # dataloader = DataLoader(valid_dataset, batch_size=32, shuffle=True)
-    # batch = next(iter(dataloader))
-    test_dataset = MultiViewDataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'test', opt.MAX_NUM_VIEWS,
-                                    use_train=False)
+    if opt.DATA_SET == 'M40v2':
+        train_txt = 'v2_trainmodel40.txt'
+        test_txt = 'v2_testmodel40.txt'
+        img_ext = 'png'
+        max_views = opt.MAX_NUM_VIEWS
+
+    # if opt.DATA_SET == 'M40v2':
+        opt.nb_classes = 40  # ModelNet40 class number
+        train_augmentation = torchvision.transforms.Compose([GroupMultiScaleCrop(224, [1, .875])])
+        normalize = GroupNormalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+        train_dataset = MVDataSet("", train_txt, 40, 'train',
+
+                                  image_tmpl="_{:03d}." + img_ext,
+
+                                  max_num_views=max_views,
+                                  transform=torchvision.transforms.Compose([
+                                      train_augmentation,
+                                      Stack(roll=False),
+                                      ToTorchFormatTensor(div=True),
+                                      normalize,
+                                  ]))
+        # valid_dataset = MVDataSet("", test_txt, 40, 'valid',
+        #                         image_tmpl="_{:03d}." + img_ext,
+        #
+        #                         max_num_views=max_views,
+        #                         transform=torchvision.transforms.Compose([
+        #                             GroupScale(int(256)),
+        #                             GroupCenterCrop(224),
+        #                             Stack(roll=False),
+        #                             ToTorchFormatTensor(div=True),
+        #                             normalize,
+        #                         ]))
+
+        sampler_train = torch.utils.data.DistributedSampler(
+            train_dataset, num_replicas=1, rank=0, shuffle=True
+        )
+        # sampler_val = torch.utils.data.SequentialSampler(valid_dataset)
+
+        train_data = DataLoader(
+            train_dataset, sampler=sampler_train,
+            batch_size=opt.TRAIN_MV_BS,
+            num_workers=opt.NUM_WORKERS,
+            pin_memory=True,
+            drop_last=True,
+        )
+        # batch = next(iter(data_loader_train))
+        # valid_data = DataLoader(
+        #     valid_dataset, sampler=sampler_val,
+        #     batch_size=int(1.5 * opt.TRAIN_MV_BS),
+        #     # batch_size=8,
+        #     num_workers=opt.NUM_WORKERS,
+        #     pin_memory=True,
+        #     drop_last=False
+        # )
+        valid_data = None
+
+    if opt.DATA_SET == 'MVP_N':
+        train_dataset = MultiViewDataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'train', opt.MAX_NUM_VIEWS,
+                                         use_train=True)
+        # dataloader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+        # batch = next(iter(dataloader))
+        valid_dataset = MultiViewDataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'valid', opt.MAX_NUM_VIEWS,
+                                         use_train=False)
+        # dataloader = DataLoader(valid_dataset, batch_size=32, shuffle=True)
+        # batch = next(iter(dataloader))
+        test_dataset = MultiViewDataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'test', opt.MAX_NUM_VIEWS,
+                                        use_train=False)
+        train_data = DataLoader(train_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS, shuffle=True,
+                                pin_memory=True, worker_init_fn=tool.seed_worker)
+        valid_data = DataLoader(valid_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS, shuffle=False,
+                                pin_memory=True, worker_init_fn=tool.seed_worker)
+        test_data = DataLoader(test_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS, shuffle=False,
+                               pin_memory=True, worker_init_fn=tool.seed_worker)
     if opt.MV_FLAG in ['TRAIN', 'TEST']:
         print('Number of Training Sets:', len(train_dataset))
-        print('Number of Valid Sets:', len(valid_dataset))
-        print('Number of Test Sets:', len(test_dataset))
+        # print('Number of Valid Sets:', len(valid_dataset))
+        # print('Number of Test Sets:', len(test_dataset))
 
-    train_data = DataLoader(train_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS, shuffle=True,
-                            pin_memory=True, worker_init_fn=tool.seed_worker)
-    valid_data = DataLoader(valid_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS, shuffle=False,
-                            pin_memory=True, worker_init_fn=tool.seed_worker)
-    test_data = DataLoader(test_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS, shuffle=False,
-                           pin_memory=True, worker_init_fn=tool.seed_worker)
+
 
     # define optimizer
     optimizer = optim.SGD(model_stage2.parameters(), lr=opt.MV_LR_INIT, weight_decay=opt.MV_WEIGHT_DECAY,
@@ -182,31 +242,85 @@ if __name__ == '__main__':
             confusion_matrix = engine.confusion_matrix(valid_data)
             tool.plot_confusion_matrix(confusion_matrix, opt.GROUPS, opt.MV_TYPE)
 
-        cprint('*' * 25 + ' Finish Training start sampling ' + '*' * 25, 'yellow')
+        cprint('*' * 25 + ' Finish Training start sampling ' + '*' * 25, opt.DATA_SET, 'yellow')
+        if opt.DATA_SET == 'M40v2':
+            max_views = opt.MAX_NUM_VIEWS
+            unlabeled_sampling_labeled_data = train_dataset.selected_ind_train
+            unlabeled_sampling_unlabeled_data = train_dataset.unselected_ind_train
 
-        unlabeled_sampling_labeled_data = train_dataset.selected_ind_train
-        unlabeled_sampling_labeled_data = [[item] for sublist in unlabeled_sampling_labeled_data for item in sublist]
-        unlabeled_sampling_unlabeled_data = train_dataset.unselected_ind_train
-        unlabeled_sampling_unlabeled_data = [[item] for sublist in unlabeled_sampling_unlabeled_data for item in
-                                             sublist]
+            # if opt.DATA_SET == 'M40v2':
+            opt.nb_classes = 40  # ModelNet40 class number
+            train_augmentation = torchvision.transforms.Compose([GroupMultiScaleCrop(224, [1, .875])])
+            normalize = GroupNormalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+            labeled_dataset = MVDataSet("", train_txt, 40, 'train',
+
+                                      image_tmpl="_{:03d}." + img_ext,
+
+                                      max_num_views=max_views,
+                                      transform=torchvision.transforms.Compose([
+                                          train_augmentation,
+                                          Stack(roll=False),
+                                          ToTorchFormatTensor(div=True),
+                                          normalize,
+                                      ]), selected_ind_train=unlabeled_sampling_labeled_data, unselected_ind_train=unlabeled_sampling_unlabeled_data)
+            unlabeled_dataset = MVDataSet("", test_txt, 40, 'sampling',
+                                      image_tmpl="_{:03d}." + img_ext,
+
+                                      max_num_views=max_views,
+                                      transform=torchvision.transforms.Compose([
+                                          GroupScale(int(256)),
+                                          GroupCenterCrop(224),
+                                          Stack(roll=False),
+                                          ToTorchFormatTensor(div=True),
+                                          normalize,
+                                      ]), selected_ind_train=unlabeled_sampling_labeled_data, unselected_ind_train=unlabeled_sampling_unlabeled_data)
+
+            sampler_train = torch.utils.data.DistributedSampler(
+                labeled_dataset, num_replicas=1, rank=0, shuffle=True
+            )
+            sampler_val = torch.utils.data.SequentialSampler(unlabeled_dataset)
+
+            labeled_data = DataLoader(
+                labeled_dataset, sampler=sampler_train,
+                batch_size=opt.TRAIN_MV_BS,
+                num_workers=opt.NUM_WORKERS,
+                pin_memory=True,
+                drop_last=True,
+            )
+            # batch = next(iter(data_loader_train))
+            unlabeled_data = DataLoader(
+                unlabeled_dataset, sampler=sampler_val,
+                batch_size=int(1.5 * opt.TRAIN_MV_BS),
+                # batch_size=8,
+                num_workers=opt.NUM_WORKERS,
+                pin_memory=True,
+                drop_last=False
+            )
+
+        if opt.DATA_SET == 'MVP_N':
+            unlabeled_sampling_labeled_data = train_dataset.selected_ind_train
+            unlabeled_sampling_labeled_data = [[item] for sublist in unlabeled_sampling_labeled_data for item in sublist]
+            unlabeled_sampling_unlabeled_data = train_dataset.unselected_ind_train
+            unlabeled_sampling_unlabeled_data = [[item] for sublist in unlabeled_sampling_unlabeled_data for item in
+                                                 sublist]
 
 
 
-        unlabeled_dataset = Unlabeled_Dataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'unlabeled',
-                                              opt.MAX_NUM_VIEWS, unlabeled_sampling_labeled_data,
-                                              unlabeled_sampling_unlabeled_data)
-        unlabeled_data = DataLoader(unlabeled_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS,
-                                    shuffle=True,
-                                    pin_memory=True, worker_init_fn=tool.seed_worker)
+            unlabeled_dataset = Unlabeled_Dataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'unlabeled',
+                                                  opt.MAX_NUM_VIEWS, unlabeled_sampling_labeled_data,
+                                                  unlabeled_sampling_unlabeled_data)
+            unlabeled_data = DataLoader(unlabeled_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS,
+                                        shuffle=True,
+                                        pin_memory=True, worker_init_fn=tool.seed_worker)
 
 
-        labeled_dataset = Unlabeled_Dataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'labeled',
-                                            opt.MAX_NUM_VIEWS, unlabeled_sampling_labeled_data,
-                                            unlabeled_sampling_unlabeled_data)
-        labeled_data = DataLoader(labeled_dataset, batch_size=opt.TEST_MV_BS, num_workers=opt.NUM_WORKERS,
-                                  shuffle=False,
-                                  pin_memory=True, worker_init_fn=tool.seed_worker)
-        # batch = next(iter(unlabeled_data))
+            labeled_dataset = Unlabeled_Dataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'labeled',
+                                                opt.MAX_NUM_VIEWS, unlabeled_sampling_labeled_data,
+                                                unlabeled_sampling_unlabeled_data)
+            labeled_data = DataLoader(labeled_dataset, batch_size=opt.TEST_MV_BS, num_workers=opt.NUM_WORKERS,
+                                      shuffle=False,
+                                      pin_memory=True, worker_init_fn=tool.seed_worker)
+            # batch = next(iter(unlabeled_data))
 
         if opt.QUERIES_STRATEGY == 'uncertainty':
             selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.uncertainty_sampling(opt,

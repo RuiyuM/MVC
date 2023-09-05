@@ -141,7 +141,14 @@ class DAN(nn.Module):
             z = z[0:num_views[i], :, :, :]
             z = z.view(z.shape[0], -1)
             z, attention_list, k_list = self.encoder(z)  # Capture returned k_list
-            k_temp = k_list[-1].permute(1, 0, 2).contiguous()  # Get the last k
+            # A = k_list[0].permute(1, 0, 2).contiguous()
+            # B = k_list[1].permute(1, 0, 2).contiguous()
+
+            # # Compute pairwise means on GPU
+            # k_temp = (A + B) / 2
+            k_temp = (torch.max(k_list[0], k_list[1])).permute(1, 0, 2).contiguous()
+
+            # k_temp = k_list[-1].permute(1, 0, 2).contiguous()  # Get the last k
             zero_tensor = torch.zeros((max_num_views, 1, 512), dtype=torch.float)
             zero_tensor[:num_views[i], :, :] = k_temp
             k_value_list.append(zero_tensor)
