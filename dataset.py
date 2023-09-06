@@ -28,7 +28,7 @@ class VideoRecord(object):
 
 class MVDataSet(data.Dataset):
     def __init__(self, root_path, list_file, num_classes, mode,
-                 image_tmpl='_{:03}.jpg', max_num_views=12, transform=None,
+                 image_tmpl='_{:03}.jpg', max_num_views=12, view_number=1, transform=None,
                  selected_ind_train=None, unselected_ind_train=None
                   ):
         self.classes = list(range(num_classes))
@@ -39,7 +39,7 @@ class MVDataSet(data.Dataset):
         self.image_tmpl = image_tmpl
         self.transform = transform
         # this view_number is the dataset default number of view for each object
-        self.view_number = 20
+        self.view_number = view_number
         self.max_num_views = max_num_views
         # self.count = 0
         self._parse_list()
@@ -62,27 +62,32 @@ class MVDataSet(data.Dataset):
         self.data = []
         print(len(self.selected_ind_train) * len(self.selected_ind_train[0][0]))
         if self.mode == 'train':
-            images = []
-            marks = torch.zeros(self.view_number)
+
+            marks = torch.zeros(self.max_num_views)
 
             for current_class in range(len(self.selected_ind_train)):
-                label = torch.full((self.view_number,), current_class, dtype=torch.int)
+                # label = torch.full((self.max_num_views,), current_class, dtype=torch.int)
+                label = torch.zeros(self.num_classes)
+                label[current_class] = 1.0
                 number_of_image_tuple = int(len(self.selected_ind_train[current_class][0]))
                 for idx in range(number_of_image_tuple):
-                    for i in range(1, 1 + self.view_number):
+                    images = []
+                    for i in range(1, 1 + self.max_num_views):
                         # print(self.selected_ind_train[current_class][0][idx] + self.image_tmpl.format(i))
-                        image = [Image.open(self.selected_ind_train[current_class][0][idx] + self.image_tmpl.format(i)).convert('RGB')]
+                        image = Image.open(self.selected_ind_train[current_class][0][idx] + self.image_tmpl.format(i)).convert('RGB')
                         if self.transform:
                             image = self.transform(image)
                         images.append(image)
-                    self.data.append((label, torch.stack(images), self.view_number, marks))
+                    self.data.append((label, torch.stack(images), int(self.max_num_views), marks))
 
         if self.mode == 'sampling':
             images = []
             marks = torch.zeros(self.view_number)
 
             for current_class in range(len(self.unselected_ind_train)):
-                label = torch.full((self.view_number,), current_class, dtype=torch.int)
+                label = torch.zeros(self.num_classes)
+                label[current_class] = 1.0
+                # label = torch.full((self.view_number,), current_class, dtype=torch.int)
                 number_of_image_tuple = int(len(self.unselected_ind_train[current_class][0]))
                 for idx in range(number_of_image_tuple):
                     for i in range(1, 1 + self.view_number):
@@ -92,7 +97,7 @@ class MVDataSet(data.Dataset):
                         if self.transform:
                             image = self.transform(image)
                         images.append(image)
-                    self.data.append((label, torch.stack(images), self.view_number, marks))
+                    self.data.append((label, torch.stack(images), int(self.view_number), marks))
 
         if self.mode == 'valid':
             images = []
@@ -129,10 +134,10 @@ class MVDataSet(data.Dataset):
             random.shuffle(class_files)
 
             # Select max_num_views element for labeled_ind_train
-            selected_ind_train[i].append(class_files[:self.max_num_views])
+            selected_ind_train[i].append(class_files[:self.view_number])
 
             # The rest go to unlabeled_ind_train
-            unselected_ind_train[i].extend(class_files[self.max_num_views:])
+            unselected_ind_train[i].extend(class_files[self.view_number:])
 
         return selected_ind_train, unselected_ind_train
 

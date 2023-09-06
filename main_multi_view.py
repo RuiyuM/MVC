@@ -113,7 +113,7 @@ if __name__ == '__main__':
         train_txt = 'v2_trainmodel40.txt'
         test_txt = 'v2_testmodel40.txt'
         img_ext = 'png'
-        max_views = opt.MAX_NUM_VIEWS
+        views_number = opt.MAX_NUM_VIEWS
 
     # if opt.DATA_SET == 'M40v2':
         opt.nb_classes = 40  # ModelNet40 class number
@@ -123,13 +123,13 @@ if __name__ == '__main__':
 
                                   image_tmpl="_{:03d}." + img_ext,
 
-                                  max_num_views=max_views,
-                                  transform=torchvision.transforms.Compose([
-                                      train_augmentation,
-                                      Stack(roll=False),
-                                      ToTorchFormatTensor(div=True),
-                                      normalize,
-                                  ]))
+                                  max_num_views=views_number,
+                                  view_number=opt.view_num,
+                                  transform=transforms.Compose([transforms.RandomHorizontalFlip(),
+                                                                transforms.ToTensor(),
+                                                                transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                                                                     std=[0.229, 0.224, 0.225])
+                                                                ]))
         # valid_dataset = MVDataSet("", test_txt, 40, 'valid',
         #                         image_tmpl="_{:03d}." + img_ext,
         #
@@ -147,13 +147,8 @@ if __name__ == '__main__':
         )
         # sampler_val = torch.utils.data.SequentialSampler(valid_dataset)
 
-        train_data = DataLoader(
-            train_dataset, sampler=sampler_train,
-            batch_size=opt.TRAIN_MV_BS,
-            num_workers=opt.NUM_WORKERS,
-            pin_memory=True,
-            drop_last=True,
-        )
+        train_data = DataLoader(train_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS, shuffle=True,
+                                pin_memory=True, worker_init_fn=tool.seed_worker)
         # batch = next(iter(data_loader_train))
         # valid_data = DataLoader(
         #     valid_dataset, sampler=sampler_val,
@@ -206,7 +201,7 @@ if __name__ == '__main__':
 
     # run multi-view
     for query in tqdm(range(opt.MV_QUERIES)):
-        engine = MultiViewEngine(model_stage2, train_data, valid_data, opt.NUM_CLASSES, optimizer, scheduler, criterion,
+        engine = MultiViewEngine(model_stage2, train_data, valid_data, 40, optimizer, scheduler, criterion,
                                  opt.MV_WEIGHT_PATH, device, opt.MV_TYPE)
         if opt.MV_FLAG == 'TRAIN':
             if opt.MV_TYPE in ['MVCNN_NEW', 'GVCNN', 'DAN', 'MVFN', 'SMVCNN']:
