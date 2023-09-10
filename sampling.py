@@ -127,17 +127,17 @@ def patch_based_selection(opt, engine, train_dataset, unlabeled_data, labeled_da
     return old_index_train, old_index_not_train
 
 
-def patch_based_selection_DAN(opt, engine, train_dataset, unlabeled_data, labeled_dataset, train_data,
+def patch_based_selection_DAN(opt, engine, train_dataset, unlabeled_data, labeled_data, train_data,
                           unlabeled_sampling_labeled_data,
                           unlabeled_sampling_unlabeled_data):
     engine.model.eval()
     label_metric_dict = {}
     with torch.no_grad():
 
-        for index, (label, image, num_views, marks) in enumerate(train_data):
+        for index, (label, image, num_views, marks) in enumerate(labeled_data):
             inputs = Variable(image).to(engine.device)
             targets = Variable(label).to(engine.device)
-            true_labels = torch.max(targets, 1)[1]
+            true_labels = torch.argmax(targets)
 
             B, V, C, H, W = inputs.shape
             inputs = inputs.view(-1, C, H, W)
