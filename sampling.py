@@ -131,14 +131,14 @@ def patch_based_selection_DAN(opt, engine, train_dataset, unlabeled_data, labele
                           unlabeled_sampling_labeled_data,
                           unlabeled_sampling_unlabeled_data):
     engine.model.eval()
-    label_metric_dict = {}
+    label_metric_dict = [{} for _ in range(opt.nb_classes)]
     with torch.no_grad():
 
-        for index, (label, image, num_views, marks) in enumerate(labeled_data):
+        for index, (label, image, num_views, object_class) in enumerate(labeled_data):
             inputs = Variable(image).to(engine.device)
             targets = Variable(label).to(engine.device)
-            true_labels = torch.argmax(targets)
-
+            true_labels = torch.max(targets, 1)[1]
+            # print(true_labels.shape)
             B, V, C, H, W = inputs.shape
             inputs = inputs.view(-1, C, H, W)
             outputs, features, utilization = engine.model(B, V, num_views, inputs)
@@ -150,16 +150,17 @@ def patch_based_selection_DAN(opt, engine, train_dataset, unlabeled_data, labele
                 # For each list in metrics, take the i-th element and add to a new list
                 new_metric_list = metrics[i]
                 # Check if the label exists in the dictionary
-                if true_label not in label_metric_dict:
-                    label_metric_dict[true_label] = []
+                # print(object_class[i].item())
+                if object_class[i].item() not in label_metric_dict[true_label]:
+                    label_metric_dict[true_label][object_class[i].item()] = []
                 # Add new_metric_list to dictionary
-                label_metric_dict[true_label].append(new_metric_list)
+                label_metric_dict[true_label][object_class[i].item()].append(new_metric_list)
 
     with torch.no_grad():
-        training_metric_label_dict = {}
+        training_metric_label_dict = [{} for _ in range(opt.nb_classes)]
 
         # First pass: collect features and paths
-        for index, (label, image, num_views, marks, train_path) in enumerate(unlabeled_data):
+        for index, (label, image, num_views, object_class, train_path) in enumerate(unlabeled_data):
             inputs = Variable(image).to(engine.device)
             targets = Variable(label).to(engine.device)
             B, V, C, H, W = inputs.shape
@@ -177,10 +178,10 @@ def patch_based_selection_DAN(opt, engine, train_dataset, unlabeled_data, labele
                 # For each list in metrics, take the i-th element and add to a new list
                 new_metric_list = metrics[i]
                 path = train_path[i]  # Get the train path for this image
-                if true_label not in training_metric_label_dict:
-                    training_metric_label_dict[true_label] = []
+                if object_class[i].item() not in training_metric_label_dict[true_label]:
+                    training_metric_label_dict[true_label][object_class[i].item()] = []
                 # Add new_metric_list and train_path to dictionary
-                training_metric_label_dict[true_label].append([new_metric_list, path])
+                training_metric_label_dict[true_label][object_class[i].item()].append([new_metric_list, path])
 
 
 
@@ -231,70 +232,141 @@ def calculate_distance(x, y):
     return distance
 
 
-def calculate_similarity_bipartite(label_metric_dict, training_metric_label_dict):
-    selected_paths = [[] for _ in range(len(label_metric_dict))]
+# def calculate_similarity_bipartite(label_metric_dict, training_metric_label_dict):
+#     selected_paths = [[] for _ in range(len(label_metric_dict))]
+#
+#     for true_label, label_metrics_list in label_metric_dict.items():
+#         if true_label not in training_metric_label_dict:
+#             continue
+#
+#         for training_metrics, path in training_metric_label_dict[true_label]:
+#             current_min_cost = float('inf')
+#
+#             # Loop over each set of metrics for this class in the labeled data
+#             for label_metrics in label_metrics_list:
+#                 # cost_matrix = torch.zeros((len(label_metrics), len(training_metrics)), device='cuda')
+#
+#                 cost_distance = calculate_distance(label_metrics, training_metrics)
+#
+#                 label_metrics = label_metrics.reshape(-1)
+#                 training_metrics = training_metrics.reshape(-1)
+#                 normalized_label_metrics = F.normalize(label_metrics, p=2, dim=0)
+#
+#                 # Element-wise L2 normalization for training_metrics
+#                 normalized_training_metrics = F.normalize(training_metrics, p=2, dim=0)
+#
+#                 # Compute cosine similarity
+#                 # Compute pairwise similarity matrix
+#                 vec1 = normalized_label_metrics.view(len(normalized_label_metrics), 1)
+#                 vec2 = normalized_training_metrics.view(1, len(normalized_training_metrics))
+#
+#                 # Step 2: Compute Pairwise Similarity
+#                 cost_matrix = torch.matmul(vec1, vec2)
+#
+#                 # Convert the cost_matrix to a NumPy array for linear_sum_assignment
+#                 cost_matrix_np = cost_matrix.cpu().numpy()
+#
+#                 # Apply linear_sum_assignment to find the optimal correspondence
+#                 row_ind, col_ind = linear_sum_assignment(cost_matrix_np)
+#
+#                 # Calculate the total cost for this correspondence
+#                 total_cost = cost_matrix_np[row_ind, col_ind].sum()
+#
+#                 # Update the current_min_cost if this total_cost is smaller
+#                 if total_cost < current_min_cost:
+#                     current_min_cost = total_cost
+#
+#             # Append the minimum cost and associated path for this unlabeled sample
+#             selected_paths[true_label].append([current_min_cost, path])
+#
+#     new_list = []
+#     score_ = []
+#     not_selected_list = []
+#     not_selected_score = []
+#     # Loop through the list of classes
+#     for paths in selected_paths:
+#         # Sort the list in descending order (highest first)
+#         sorted_paths = sorted(paths, key=lambda x: x[0], reverse=True)
+#
+#         # Select the top 10 biggest and store their paths
+#         selected_paths_for_class = sorted_paths[0]
+#         unselected_paths_for_class = sorted_paths[-1]
+#         score_.append(selected_paths_for_class[0])
+#         # Extract the paths only
+#         selected_paths_for_class = selected_paths_for_class[1]
+#         not_selected_list.append(unselected_paths_for_class[1])
+#         not_selected_score.append(unselected_paths_for_class[0])
+#
+#         new_list.append(selected_paths_for_class)
+#
+#     print(new_list)
+#     print(score_)
+#     print(not_selected_list)
+#     print(not_selected_score)
+#     return new_list
 
-    for true_label, label_metrics_list in label_metric_dict.items():
-        if true_label not in training_metric_label_dict:
-            continue
+def calculate_similarity_bipartite(label_metric_dicts, training_metric_label_dicts):
+    selected_paths = [[] for _ in range(len(label_metric_dicts))]
+    new_list = [[] for _ in range(len(label_metric_dicts))]
+    for i, label_metric_dict in enumerate(label_metric_dicts):
+        current_path = [[] for _ in range(len(label_metric_dict))]
+        new_list[i].append(current_path)
+        for true_label, label_metrics_list in label_metric_dict.items():
 
-        for training_metrics, path in training_metric_label_dict[true_label]:
-            current_min_cost = float('inf')
+            if true_label not in training_metric_label_dicts[i]:
+                continue
 
-            # Loop over each set of metrics for this class in the labeled data
-            for label_metrics in label_metrics_list:
-                # cost_matrix = torch.zeros((len(label_metrics), len(training_metrics)), device='cuda')
+            for training_metrics, path in training_metric_label_dicts[i][true_label]:
+                current_min_cost = float('inf')
 
-                cost_distance = calculate_distance(label_metrics, training_metrics)
+                for label_metrics in label_metrics_list:
+                    # cost_distance = calculate_distance(label_metrics, training_metrics)
 
-                label_metrics = label_metrics.reshape(-1)
-                training_metrics = training_metrics.reshape(-1)
-                normalized_label_metrics = F.normalize(label_metrics, p=2, dim=0)
+                    label_metrics = label_metrics.reshape(-1)
+                    training_metrics = training_metrics.reshape(-1)
+                    normalized_label_metrics = F.normalize(label_metrics, p=2, dim=0)
+                    normalized_training_metrics = F.normalize(training_metrics, p=2, dim=0)
 
-                # Element-wise L2 normalization for training_metrics
-                normalized_training_metrics = F.normalize(training_metrics, p=2, dim=0)
+                    vec1 = normalized_label_metrics.view(len(normalized_label_metrics), 1)
+                    vec2 = normalized_training_metrics.view(1, len(normalized_training_metrics))
+                    cost_matrix = torch.matmul(vec1, vec2)
+                    cost_matrix_np = cost_matrix.cpu().numpy()
 
-                # Compute cosine similarity
-                # Compute pairwise similarity matrix
-                vec1 = normalized_label_metrics.view(len(normalized_label_metrics), 1)
-                vec2 = normalized_training_metrics.view(1, len(normalized_training_metrics))
+                    row_ind, col_ind = linear_sum_assignment(cost_matrix_np)
+                    total_cost = cost_matrix_np[row_ind, col_ind].sum()
 
-                # Step 2: Compute Pairwise Similarity
-                cost_matrix = torch.matmul(vec1, vec2)
+                    if total_cost < current_min_cost:
+                        current_min_cost = total_cost
 
-                # Convert the cost_matrix to a NumPy array for linear_sum_assignment
-                cost_matrix_np = cost_matrix.cpu().numpy()
+                current_path[true_label].append([current_min_cost, path])
+        selected_paths[i].append(current_path)
 
-                # Apply linear_sum_assignment to find the optimal correspondence
-                row_ind, col_ind = linear_sum_assignment(cost_matrix_np)
 
-                # Calculate the total cost for this correspondence
-                total_cost = cost_matrix_np[row_ind, col_ind].sum()
+    # new_list = []
+    score_ = []
+    not_selected_list = []
+    not_selected_score = []
 
-                # Update the current_min_cost if this total_cost is smaller
-                if total_cost < current_min_cost:
-                    current_min_cost = total_cost
-
-            # Append the minimum cost and associated path for this unlabeled sample
-            selected_paths[true_label].append([current_min_cost, path])
-
-    new_list = []
-
-    # Loop through the list of classes
-    for paths in selected_paths:
-        # Sort the list in descending order (highest first)
-        sorted_paths = sorted(paths, key=lambda x: x[0], reverse=True)
-
-        # Select the top 10 biggest and store their paths
-        selected_paths_for_class = sorted_paths[0]
-
-        # Extract the paths only
-        selected_paths_for_class = selected_paths_for_class[1]
-
-        new_list.append(selected_paths_for_class)
+    for idx in range(len(selected_paths)):
+        selected_path = selected_paths[idx]
+        for jdx in range(len(selected_path)):
+            paths = selected_path[jdx]
+            sorted_paths = sorted(paths, key=lambda x: x[0], reverse=True)
+            selected_paths_for_class = sorted_paths[0]
+            unselected_paths_for_class = sorted_paths[-1]
+            score_.append(selected_paths_for_class[0])
+            selected_paths_for_class = selected_paths_for_class[1]
+            not_selected_list.append(unselected_paths_for_class[1])
+            not_selected_score.append(unselected_paths_for_class[0])
+            new_list[idx][jdx].append((selected_paths_for_class, jdx))
 
     print(new_list)
+    print(score_)
+    print(not_selected_list)
+    print(not_selected_score)
     return new_list
+
+
 
 
 def calculate_similarity_3(label_metric_dict, training_metric_label_dict):
@@ -488,7 +560,7 @@ def uncertainty_sampling(opt, engine, train_dataset, unlabeled_data, labeled_dat
     engine.model.eval()
     with torch.no_grad():
         entropy_dict = {i: {"entropy": [], "path": []} for i in
-                        range(44)}  # Initialize the dictionary to store entropy and path for each class
+                        range(opt.NUM_CLASSES)}  # Initialize the dictionary to store entropy and path for each class
 
         for index, (label, image, num_views, marks, train_path) in enumerate(unlabeled_data):
             inputs = Variable(image).to(engine.device)
@@ -512,7 +584,7 @@ def uncertainty_sampling(opt, engine, train_dataset, unlabeled_data, labeled_dat
         old_index_train = train_dataset.selected_ind_train
         old_index_not_train = train_dataset.unselected_ind_train
 
-        for class_index in range(44):
+        for class_index in range(opt.NUM_CLASSES):
             max_entropy_index = torch.argmax(
                 torch.tensor(entropy_dict[class_index]["entropy"]))  # Get index of maximum entropy
             highest_entropy_path = entropy_dict[class_index]["path"][max_entropy_index]  # Get corresponding path
@@ -523,7 +595,7 @@ def uncertainty_sampling(opt, engine, train_dataset, unlabeled_data, labeled_dat
             # Remove the highest_entropy_path from the sublist in old_index_not_train at class_index
             if highest_entropy_path in old_index_not_train[class_index]:
                 old_index_not_train[class_index].remove(highest_entropy_path)
-
+        print(old_index_train)
         return old_index_train, old_index_not_train
 
 
@@ -589,7 +661,7 @@ def dissimilarity_sampling(opt, engine, train_dataset, unlabeled_data, labeled_d
 
                 if most_dissimilar_path in old_index_not_train[class_index]:
                     old_index_not_train[class_index].remove(most_dissimilar_path)
-
+        print(old_index_train)
         return old_index_train, old_index_not_train
 
 
@@ -662,6 +734,7 @@ def random_sampling(opt, engine, train_dataset, unlabeled_data, labeled_dataset)
                 # Remove the selected_path from the sublist in old_index_not_train at class_index
                 if selected_path in old_index_not_train[class_index]:
                     old_index_not_train[class_index].remove(selected_path)
+        print(old_index_train)
 
         return old_index_train, old_index_not_train
 

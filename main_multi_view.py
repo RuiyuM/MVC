@@ -134,6 +134,7 @@ if __name__ == '__main__':
                                                                               mean=[0.485, 0.456, 0.406],
                                                                               std=[0.229, 0.224, 0.225])
                                                                           ]))
+        print(train_dataset.selected_ind_train)
         valid_dataset = object_wise_dataset("", test_txt, 40, 'valid',
                                             image_tmpl="_{:03d}." + img_ext,
 
@@ -151,7 +152,7 @@ if __name__ == '__main__':
 
         train_data = DataLoader(train_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS, shuffle=True,
                                 pin_memory=True, worker_init_fn=tool.seed_worker)
-        # batch = next(iter(data_loader_train))
+        # batch = next(iter(train_data))
         # valid_data = DataLoader(
         #     valid_dataset, sampler=sampler_val,
         #     batch_size=int(1.5 * opt.TRAIN_MV_BS),
@@ -311,7 +312,7 @@ if __name__ == '__main__':
                                                   opt.MAX_NUM_VIEWS, unlabeled_sampling_labeled_data,
                                                   unlabeled_sampling_unlabeled_data)
             unlabeled_data = DataLoader(unlabeled_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS,
-                                        shuffle=True,
+                                        shuffle=False,
                                         pin_memory=True, worker_init_fn=tool.seed_worker)
 
             labeled_dataset = Unlabeled_Dataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'labeled',
@@ -321,7 +322,7 @@ if __name__ == '__main__':
                                       shuffle=False,
                                       pin_memory=True, worker_init_fn=tool.seed_worker)
             # batch = next(iter(unlabeled_data))
-
+        print(opt.QUERIES_STRATEGY)
         if opt.QUERIES_STRATEGY == 'uncertainty':
             selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.uncertainty_sampling(opt,
                                                                                                                     engine,
@@ -409,8 +410,39 @@ if __name__ == '__main__':
         print(len(selected_ind_train_after_sampling[0]))
         print(len(unselected_ind_train__after_sampling[0]))
 
-        train_dataset = MultiViewDataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'train', opt.MAX_NUM_VIEWS,
-                                         use_train=True, selected_ind_train=selected_ind_train_after_sampling,
-                                         unselected_ind_train=unselected_ind_train__after_sampling)
-        train_data = DataLoader(train_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS, shuffle=True,
-                                pin_memory=True, worker_init_fn=tool.seed_worker)
+        if opt.DATA_SET == 'M40v2':
+            train_txt = 'v2_trainmodel40.txt'
+            test_txt = 'v2_testmodel40.txt'
+            img_ext = 'png'
+            views_number = opt.MAX_NUM_VIEWS
+
+            # if opt.DATA_SET == 'M40v2':
+            opt.nb_classes = 40  # ModelNet40 class number
+
+            train_dataset = object_wise_dataset("", train_txt, 40, 'train',
+
+                                                image_tmpl="_{:03d}." + img_ext,
+
+                                                max_num_views=views_number,
+                                                view_number=opt.view_num,
+                                                transform=transforms.Compose([transforms.RandomHorizontalFlip(),
+                                                                              transforms.ToTensor(),
+                                                                              transforms.Normalize(
+                                                                                  mean=[0.485, 0.456, 0.406],
+                                                                                  std=[0.229, 0.224, 0.225])
+                                                                              ]),
+                                                selected_ind_train=selected_ind_train_after_sampling,
+                                                unselected_ind_train=unselected_ind_train__after_sampling
+                                                )
+
+
+            train_data = DataLoader(train_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS,
+                                    shuffle=True,
+                                    pin_memory=True, worker_init_fn=tool.seed_worker)
+
+        if opt.DATA_SET == 'MVP_N':
+            train_dataset = MultiViewDataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'train', opt.MAX_NUM_VIEWS,
+                                             use_train=True, selected_ind_train=selected_ind_train_after_sampling,
+                                             unselected_ind_train=unselected_ind_train__after_sampling)
+            train_data = DataLoader(train_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS, shuffle=True,
+                                    pin_memory=True, worker_init_fn=tool.seed_worker)

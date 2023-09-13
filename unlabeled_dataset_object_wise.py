@@ -67,23 +67,24 @@ class unlabeled_object_wise_dataset(data.Dataset):
 
             for current_class in range(len(self.selected_ind_train)):
                 # label = torch.full((self.max_num_views,), current_class, dtype=torch.int)
-                images = []
-                label = torch.zeros(self.num_classes)
-                label[current_class] = 1.0
-                # number_of_image_tuple = int(len(self.selected_ind_train[current_class][0]))
-                print(self.selected_ind_train[current_class][0])
-                for idx in range(len(self.selected_ind_train[current_class])):
+                for current_object in self.selected_ind_train[current_class][0]:
 
+                    images = []
+                    label = torch.zeros(self.num_classes)
+                    label[current_class] = 1.0
+                    # number_of_image_tuple = int(len(self.selected_ind_train[current_class][0]))
+                    # print(self.selected_ind_train[current_class][0])
+                    for idx in range(len(current_object)):
 
-                    # print(self.selected_ind_train[current_class][0][idx] + self.image_tmpl.format(i))
-                    image = Image.open(self.selected_ind_train[current_class][idx]).convert('RGB')
-                    if self.transform:
-                        image = self.transform(image)
-                    images.append(image)
+                        # print(self.selected_ind_train[current_class][0][idx] + self.image_tmpl.format(i))
+                        image = Image.open(current_object[idx][0]).convert('RGB')
+                        if self.transform:
+                            image = self.transform(image)
+                        images.append(image)
 
-                    for i in range(0, self.max_num_views - 1):
-                        images.append(torch.zeros_like(images[0]))
-                    self.data.append((label, torch.stack(images), 1, marks))
+                        for i in range(0, self.max_num_views - 1):
+                            images.append(torch.zeros_like(images[0]))
+                        self.data.append((label, torch.stack(images), len(self.selected_ind_train[current_class]), current_object[idx][1]))
 
         if self.mode == 'sampling':
             images = []
@@ -105,25 +106,29 @@ class unlabeled_object_wise_dataset(data.Dataset):
 
         if self.mode == 'unlabeled':
 
-            marks = torch.zeros(self.max_num_views)
+
 
             for current_class in range(len(self.unselected_ind_train)):
-                images = []
-                label = torch.zeros(self.num_classes)
-                label[current_class] = 1.0
-                # number_of_image_tuple = int(len(self.none_train_path[current_class]))
+                # label = torch.full((self.max_num_views,), current_class, dtype=torch.int)
+                for current_object in self.unselected_ind_train[current_class][0]:
 
-                for idx in range(len(self.unselected_ind_train[current_class])):
-                    # for i in range(1, 1 + self.max_num_views):
-                    # print(self.none_train_path[current_class][0][idx] + self.image_tmpl.format(i))
-                    image = Image.open(self.unselected_ind_train[current_class][idx]).convert(
-                        'RGB')
-                    if self.transform:
-                        image = self.transform(image)
-                    images.append(image)
-                    for i in range(0, self.max_num_views - 1):
-                        images.append(torch.zeros_like(images[0]))
-                    self.data.append((label, torch.stack(images), 1, marks))
+                    images = []
+                    label = torch.zeros(self.num_classes)
+                    label[current_class] = 1.0
+                    # number_of_image_tuple = int(len(self.selected_ind_train[current_class][0]))
+                    # print(self.selected_ind_train[current_class][0])
+                    for idx in range(len(current_object)):
+
+                        # # print(self.selected_ind_train[current_class][0][idx] + self.image_tmpl.format(i))
+                        # image = Image.open(current_object[idx]).convert('RGB')
+                        # if self.transform:
+                        #     image = self.transform(image)
+                        # images.append(image)
+
+                        # for i in range(0, self.max_num_views - 1):
+                        #     images.append(torch.zeros_like(images[0]))
+                        # self.data.append((label, torch.stack(images), len(self.unselected_ind_train[current_class]), marks, current_object[idx]))
+                        self.data.append((label, current_object[idx][0], current_object[idx][1]))
 
 
 
@@ -170,7 +175,21 @@ class unlabeled_object_wise_dataset(data.Dataset):
         self.video_list = [VideoRecord(x.strip().split(' ')) for x in open(self.list_file)]
 
     def __getitem__(self, index):
-        return self.data[index]
+        if self.mode == 'labeled':
+            return self.data[index]
+        else:
+            images = []
+            marks = self.data[index][2]
+            current_object = self.data[index][1]
+            label = self.data[index][0]
+            image = Image.open(current_object).convert('RGB')
+            if self.transform:
+                image = self.transform(image)
+            images.append(image)
+
+            for i in range(0, self.max_num_views - 1):
+                images.append(torch.zeros_like(images[0]))
+            return label, torch.stack(images), 1, marks, current_object
 
     # def __getitem__(self, index):
     #     record = self.video_list[index]
@@ -203,8 +222,6 @@ class unlabeled_object_wise_dataset(data.Dataset):
 
     def __len__(self):
         if self.mode == 'labeled':
-            return 40
+            return len(self.data)
         if self.mode == 'unlabeled':
-            return len(self.unselected_ind_train[0]) * len(self.unselected_ind_train)
-        elif self.mode == 'sampling':
-            return len(self.video_list) - len(self.selected_ind_train) * len(self.selected_ind_train[0][0])
+            return len(self.data)
