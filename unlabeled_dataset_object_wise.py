@@ -82,8 +82,8 @@ class unlabeled_object_wise_dataset(data.Dataset):
                             image = self.transform(image)
                         images.append(image)
 
-                        for i in range(0, self.max_num_views - 1):
-                            images.append(torch.zeros_like(images[0]))
+                        # for i in range(0, self.max_num_views - 1):
+                        #     images.append(torch.zeros_like(images[0]))
                         self.data.append((label, torch.stack(images), len(self.selected_ind_train[current_class]), current_object[idx][1]))
 
         if self.mode == 'sampling':
@@ -187,8 +187,8 @@ class unlabeled_object_wise_dataset(data.Dataset):
                 image = self.transform(image)
             images.append(image)
 
-            for i in range(0, self.max_num_views - 1):
-                images.append(torch.zeros_like(images[0]))
+            # for i in range(0, self.max_num_views - 1):
+            #     images.append(torch.zeros_like(images[0]))
             return label, torch.stack(images), 1, marks, current_object
 
     # def __getitem__(self, index):

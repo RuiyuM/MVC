@@ -24,7 +24,9 @@ from PIL import Image
 from unlabeled_Sampling_Dataset import Unlabeled_Dataset
 from torch.utils.data import DataLoader
 import utils as tool
-
+from multiprocessing import Pool
+import time
+import copy
 
 def patch_based_selection(opt, engine, train_dataset, unlabeled_data, labeled_dataset, train_data,
                           unlabeled_sampling_labeled_data,
@@ -143,7 +145,7 @@ def patch_based_selection_DAN(opt, engine, train_dataset, unlabeled_data, labele
             inputs = inputs.view(-1, C, H, W)
             outputs, features, utilization = engine.model(B, V, num_views, inputs)
             batch_size, token_dimension = features.shape
-            metrics = engine.model.k_value.reshape(len(true_labels), opt.MAX_NUM_VIEWS, token_dimension)
+            metrics = engine.model.k_value.reshape(len(true_labels), 1, token_dimension)
 
             for i in range(true_labels.size(0)):
                 true_label = true_labels[i].item()  # Convert tensor to Python scalar
@@ -170,7 +172,7 @@ def patch_based_selection_DAN(opt, engine, train_dataset, unlabeled_data, labele
             true_labels = torch.max(targets, 1)[1]  # This is now a tensor of labels for the batch
 
             batch_size, token_dimension = features.shape
-            metrics = engine.model.k_value.reshape(len(true_labels), opt.MAX_NUM_VIEWS, token_dimension)
+            metrics = engine.model.k_value.reshape(len(true_labels), 1, token_dimension)
 
             # Loop over the batch
             for i in range(true_labels.size(0)):
@@ -197,14 +199,39 @@ def patch_based_selection_DAN(opt, engine, train_dataset, unlabeled_data, labele
 
         # for least_similar_path in least_similar_paths:
             # Append the least_similar_path to the corresponding sublist in old_index_train
-        old_index_train[class_index].append(least_similar_paths)
+        for idx in range(len(least_similar_paths[0])):
+            old_index_train[class_index][0][idx].append(least_similar_paths[0][idx][0])
+            # print(len(old_index_not_train[class_index][0][idx]))
+            for jdx in range(len(old_index_not_train[class_index][0][idx])):
+                x1 = least_similar_paths[0][idx][0][0]
+                x2 = old_index_not_train[class_index][0][idx][jdx][0]
+                if x1 == x2:
+                    del old_index_not_train[class_index][0][idx][jdx]
+                    break
+
 
             # Remove the least_similar_path from the sublist in old_index_not_train at class_index
             # Assuming old_index_not_train is a list of lists where each sublist corresponds to a class and contains the paths of the images for that class
-        if least_similar_paths in old_index_not_train[class_index]:
-                old_index_not_train[class_index].remove(least_similar_paths)
+
 
     return old_index_train, old_index_not_train
+
+def calculate_distance_DAN(args):
+    label_metrics, training_metrics, true_label, path = args
+    label_metrics = label_metrics.reshape(-1)
+    training_metrics = training_metrics.reshape(-1)
+    normalized_label_metrics = F.normalize(label_metrics, p=2, dim=0)
+    normalized_training_metrics = F.normalize(training_metrics, p=2, dim=0)
+
+    vec1 = normalized_label_metrics.view(len(normalized_label_metrics), 1)
+    vec2 = normalized_training_metrics.view(1, len(normalized_training_metrics))
+    cost_matrix = torch.matmul(vec1, vec2)
+    cost_matrix_np = cost_matrix.cpu().numpy()
+
+    row_ind, col_ind = linear_sum_assignment(cost_matrix_np)
+    total_cost = cost_matrix_np[row_ind, col_ind].sum()
+
+    return true_label, total_cost, path
 
 
 def calculate_distance(x, y):
@@ -306,11 +333,12 @@ def calculate_distance(x, y):
 #     return new_list
 
 def calculate_similarity_bipartite(label_metric_dicts, training_metric_label_dicts):
+    start_time = time.time()
     selected_paths = [[] for _ in range(len(label_metric_dicts))]
     new_list = [[] for _ in range(len(label_metric_dicts))]
     for i, label_metric_dict in enumerate(label_metric_dicts):
         current_path = [[] for _ in range(len(label_metric_dict))]
-        new_list[i].append(current_path)
+        new_list[i].append(copy.deepcopy(current_path))
         for true_label, label_metrics_list in label_metric_dict.items():
 
             if true_label not in training_metric_label_dicts[i]:
@@ -338,10 +366,14 @@ def calculate_similarity_bipartite(label_metric_dicts, training_metric_label_dic
                     if total_cost < current_min_cost:
                         current_min_cost = total_cost
 
-                current_path[true_label].append([current_min_cost, path])
+                current_path[true_label].append(path)
+
         selected_paths[i].append(current_path)
 
-
+    end_time = time.time()
+    print(f"Start time: {start_time}")
+    print(f"End time: {end_time}")
+    print(f"Total execution time: {end_time - start_time} seconds")
     # new_list = []
     score_ = []
     not_selected_list = []
@@ -349,24 +381,75 @@ def calculate_similarity_bipartite(label_metric_dicts, training_metric_label_dic
 
     for idx in range(len(selected_paths)):
         selected_path = selected_paths[idx]
-        for jdx in range(len(selected_path)):
-            paths = selected_path[jdx]
+        for jdx in range(len(selected_path[0])):
+            paths = selected_path[0][jdx]
             sorted_paths = sorted(paths, key=lambda x: x[0], reverse=True)
             selected_paths_for_class = sorted_paths[0]
             unselected_paths_for_class = sorted_paths[-1]
             score_.append(selected_paths_for_class[0])
-            selected_paths_for_class = selected_paths_for_class[1]
             not_selected_list.append(unselected_paths_for_class[1])
             not_selected_score.append(unselected_paths_for_class[0])
-            new_list[idx][jdx].append((selected_paths_for_class, jdx))
+            new_list[idx][0][jdx].append((selected_paths_for_class, jdx))
 
     print(new_list)
-    print(score_)
-    print(not_selected_list)
-    print(not_selected_score)
+    # print(score_)
+    # print(not_selected_list)
+    # print(not_selected_score)
     return new_list
 
 
+# def calculate_similarity_bipartite(label_metric_dicts, training_metric_label_dicts):
+#     selected_paths = [[] for _ in range(len(label_metric_dicts))]
+#     new_list = [[] for _ in range(len(label_metric_dicts))]
+#     start_time = time.time()
+#     for i, label_metric_dict in enumerate(label_metric_dicts):
+#         current_path = [[] for _ in range(len(label_metric_dict))]
+#         new_list[i].append(current_path)
+#
+#         for true_label, label_metrics_list in label_metric_dict.items():
+#             if true_label not in training_metric_label_dicts[i]:
+#                 continue
+#
+#             args_list = [(label_metrics, training_metrics, true_label, path)
+#                          for training_metrics, path in training_metric_label_dicts[i][true_label]
+#                          for label_metrics in label_metrics_list]
+#
+#             with Pool() as pool:
+#                 results = pool.map(calculate_distance_DAN, args_list)
+#
+#             current_min_cost = min(results, key=lambda x: x[1])[1]
+#             current_path[true_label].append(min(results, key=lambda x: x[1])[1:])
+#             # count += 1
+#             # print(count)
+#
+#         selected_paths[i].append(current_path)
+#     end_time = time.time()
+#     print(f"Start time: {start_time}")
+#     print(f"End time: {end_time}")
+#     print(f"Total execution time: {end_time - start_time} seconds")
+#     # new_list = []
+#     score_ = []
+#     not_selected_list = []
+#     not_selected_score = []
+#
+#     for idx in range(len(selected_paths)):
+#         selected_path = selected_paths[idx]
+#         for jdx in range(len(selected_path)):
+#             paths = selected_path[0][jdx]
+#             sorted_paths = sorted(paths, key=lambda x: x[0], reverse=True)
+#             selected_paths_for_class = sorted_paths[0]
+#             unselected_paths_for_class = sorted_paths[-1]
+#             score_.append(selected_paths_for_class[0])
+#             selected_paths_for_class = selected_paths_for_class[1]
+#             not_selected_list.append(unselected_paths_for_class[1])
+#             not_selected_score.append(unselected_paths_for_class[0])
+#             new_list[idx][jdx].append((selected_paths_for_class, jdx))
+#
+#     print(new_list)
+#     print(score_)
+#     print(not_selected_list)
+#     print(not_selected_score)
+#     return new_list
 
 
 def calculate_similarity_3(label_metric_dict, training_metric_label_dict):

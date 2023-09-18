@@ -75,9 +75,9 @@ class object_wise_dataset(data.Dataset):
                     # number_of_image_tuple = int(len(self.selected_ind_train[current_class][0]))
                     # print(self.selected_ind_train[current_class][0])
                     for idx in range(len(current_object)):
-
+                        # print(current_object[idx][0].type)
                         # print(self.selected_ind_train[current_class][0][idx] + self.image_tmpl.format(i))
-                        image = Image.open(current_object[idx][0]).convert('RGB')
+                        image = Image.open(str(current_object[idx][0])).convert('RGB')
                         if self.transform:
                             image = self.transform(image)
                         images.append(image)
@@ -131,7 +131,7 @@ class object_wise_dataset(data.Dataset):
             # Shuffle the list in-place
             random.shuffle(class_files)
             # select top 50% of the object in that class
-            class_files = class_files[:len(class_files) // 20]
+            class_files = class_files[:len(class_files) // 50]
             class_differentiater_selected = [[] for _ in range(len(class_files))]
             class_differentiater_unselected = [[] for _ in range(len(class_files))]
             for idx in range(len(class_files)):
