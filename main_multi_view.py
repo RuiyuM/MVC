@@ -324,19 +324,19 @@ if __name__ == '__main__':
             # batch = next(iter(unlabeled_data))
         print(opt.QUERIES_STRATEGY)
         if opt.QUERIES_STRATEGY == 'uncertainty':
-            selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.uncertainty_sampling(opt,
+            selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.uncertainty_sampling_one_label_multi_Ob(opt,
                                                                                                                     engine,
                                                                                                                     train_dataset,
                                                                                                                     unlabeled_data,
                                                                                                                     labeled_dataset)
 
         if opt.QUERIES_STRATEGY == 'dissimilarity_sampling':
-            selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.dissimilarity_sampling(
+            selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.dissimilarity_sampling_object_wise(
                 opt,
                 engine,
                 train_dataset,
                 unlabeled_data,
-                labeled_dataset,
+                labeled_data,
                 train_data
             )
 
@@ -353,7 +353,7 @@ if __name__ == '__main__':
             )
 
         if opt.QUERIES_STRATEGY == 'random':
-            selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.random_sampling(opt,
+            selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.random_sampling_object_wise(opt,
                                                                                                                engine,
                                                                                                                train_dataset,
                                                                                                                unlabeled_data,

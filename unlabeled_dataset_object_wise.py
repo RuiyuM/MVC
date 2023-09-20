@@ -69,13 +69,13 @@ class unlabeled_object_wise_dataset(data.Dataset):
                 # label = torch.full((self.max_num_views,), current_class, dtype=torch.int)
                 for current_object in self.selected_ind_train[current_class][0]:
 
-                    images = []
+
                     label = torch.zeros(self.num_classes)
                     label[current_class] = 1.0
                     # number_of_image_tuple = int(len(self.selected_ind_train[current_class][0]))
                     # print(self.selected_ind_train[current_class][0])
                     for idx in range(len(current_object)):
-
+                        images = []
                         # print(self.selected_ind_train[current_class][0][idx] + self.image_tmpl.format(i))
                         image = Image.open(current_object[idx][0]).convert('RGB')
                         if self.transform:
@@ -84,7 +84,7 @@ class unlabeled_object_wise_dataset(data.Dataset):
 
                         # for i in range(0, self.max_num_views - 1):
                         #     images.append(torch.zeros_like(images[0]))
-                        self.data.append((label, torch.stack(images), len(self.selected_ind_train[current_class]), current_object[idx][1]))
+                        self.data.append((label, torch.stack(images), 1, current_object[idx][1]))
 
         if self.mode == 'sampling':
             images = []

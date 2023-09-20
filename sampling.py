@@ -681,12 +681,70 @@ def uncertainty_sampling(opt, engine, train_dataset, unlabeled_data, labeled_dat
         print(old_index_train)
         return old_index_train, old_index_not_train
 
+def uncertainty_sampling_one_label_multi_Ob(opt, engine, train_dataset, unlabeled_data, labeled_dataset):
+    engine.model.eval()
+    with torch.no_grad():
+        entropy_dict = [{} for _ in range(opt.nb_classes)]
+
+        for index, (label, image, num_views, object_class, train_path) in enumerate(unlabeled_data):
+            # object_class 是 path + model id
+            inputs = Variable(image).to(engine.device)
+            targets = Variable(label).to(engine.device)
+            true_labels = torch.max(targets, 1)[1]
+            B, V, C, H, W = inputs.shape
+            inputs = inputs.view(-1, C, H, W)
+            outputs, features, utilization = engine.model(B, V, num_views, inputs)
+
+            softmax_outputs = torch.nn.functional.softmax(outputs, dim=1)
+            entropy = -torch.sum(softmax_outputs * torch.log2(softmax_outputs + 1e-6), dim=1)
+
+
+
+
+            for i in range(true_labels.size(0)):
+                # continue
+                true_label = true_labels[i].item()
+                path = train_path[i]
+                current_entropy = entropy[i]
+                if object_class[i].item() not in entropy_dict[true_label]:
+                    entropy_dict[true_label][object_class[i].item()] = []
+                entropy_dict[true_label][object_class[i].item()].append([current_entropy, path])
+                # class_index = transform_targets[i].item()
+                # entropy_dict[class_index]["entropy"].append(entropy[i].item())
+                # entropy_dict[class_index]["path"].append(train_path[i])
+
+
+        old_index_train = train_dataset.selected_ind_train
+        old_index_not_train = train_dataset.unselected_ind_train
+
+        for class_index in range(len(entropy_dict)):
+            selected_path = entropy_dict[class_index]
+            for object_class, value_ in selected_path.items():
+                sorted_entropy = sorted(value_, key=lambda x: x[0], reverse=True)
+                max_entropy = sorted_entropy[0][0]
+                current_path = sorted_entropy[0][1]
+
+
+
+                old_index_train[class_index][0][object_class].append((current_path, object_class))
+
+                for jdx in range(len(old_index_not_train[class_index][0][object_class])):
+                    x1 = current_path
+                    x2 = old_index_not_train[class_index][0][object_class][jdx][0]
+                    if x1 == x2:
+                        del old_index_not_train[class_index][0][object_class][jdx]
+                        break
+
+        print(old_index_train)
+        return old_index_train, old_index_not_train
+
+
 
 def dissimilarity_sampling(opt, engine, train_dataset, unlabeled_data, labeled_dataset, train_data):
     engine.model.eval()
 
     with torch.no_grad():
-        feature_dict_train = {i: {"features": []} for i in range(44)}
+        feature_dict_train = {i: {"features": []} for i in range(opt.nb_classes)}
         for index, (label, image, num_views, marks) in enumerate(train_data):
             inputs = Variable(image).to(engine.device)
             targets = Variable(label).to(engine.device)
@@ -699,7 +757,7 @@ def dissimilarity_sampling(opt, engine, train_dataset, unlabeled_data, labeled_d
                 feature_dict_train[class_index]["features"].append(features[i].detach().cpu().numpy())
 
     with torch.no_grad():
-        feature_dict = {i: {"features": [], "path": []} for i in range(44)}
+        feature_dict = {i: {"features": [], "path": []} for i in range(opt.nb_classes)}
 
         # First pass: collect features and paths
         for index, (label, image, num_views, marks, train_path) in enumerate(unlabeled_data):
@@ -716,10 +774,10 @@ def dissimilarity_sampling(opt, engine, train_dataset, unlabeled_data, labeled_d
                 feature_dict[class_index]["features"].append(features[i].detach().cpu().numpy())
                 feature_dict[class_index]["path"].append(train_path[i])
 
-        dissimilarity_dict = {i: {"dissimilarity": [], "path": []} for i in range(44)}
+        dissimilarity_dict = {i: {"dissimilarity": [], "path": []} for i in range(opt.nb_classes)}
 
         # Second pass: compute dissimilarities
-        for class_index in range(44):
+        for class_index in range(opt.nb_classes):
             if feature_dict[class_index]["features"]:
                 # Normalize features before computing mean
                 normalized_features_train = normalize(feature_dict_train[class_index]["features"])
@@ -735,7 +793,7 @@ def dissimilarity_sampling(opt, engine, train_dataset, unlabeled_data, labeled_d
         old_index_not_train = train_dataset.unselected_ind_train
 
         # Third pass: select most dissimilar samples
-        for class_index in range(44):
+        for class_index in range(opt.nb_classes):
             if dissimilarity_dict[class_index]["dissimilarity"]:
                 max_dissimilarity_index = np.argmax(dissimilarity_dict[class_index]["dissimilarity"])
                 most_dissimilar_path = dissimilarity_dict[class_index]["path"][max_dissimilarity_index]
@@ -747,6 +805,72 @@ def dissimilarity_sampling(opt, engine, train_dataset, unlabeled_data, labeled_d
         print(old_index_train)
         return old_index_train, old_index_not_train
 
+def dissimilarity_sampling_object_wise(opt, engine, train_dataset, unlabeled_data, labeled_data, train_data):
+    engine.model.eval()
+
+    with torch.no_grad():
+        feature_dict_train = [{} for _ in range(opt.nb_classes)]
+        for index, (label, image, num_views, object_class) in enumerate(labeled_data):
+            inputs = Variable(image).to(engine.device)
+            targets = Variable(label).to(engine.device)
+            true_labels = torch.max(targets, 1)[1]
+            B, V, C, H, W = inputs.shape
+            inputs = inputs.view(-1, C, H, W)
+            outputs, features, utilization = engine.model(B, V, num_views, inputs)
+            for i in range(true_labels.size(0)):
+                true_label = true_labels[i].item()
+                if object_class[i].item() not in feature_dict_train[true_label]:
+                    feature_dict_train[true_label][object_class[i].item()] = {"features": []}
+                feature_dict_train[true_label][object_class[i].item()]["features"].append(
+                    features[i].detach().cpu().numpy())
+
+    with torch.no_grad():
+        feature_dict = [{} for _ in range(opt.nb_classes)]
+        for index, (label, image, num_views, object_class, train_path) in enumerate(unlabeled_data):
+            inputs = Variable(image).to(engine.device)
+            targets = Variable(label).to(engine.device)
+            true_labels = torch.max(targets, 1)[1]
+            B, V, C, H, W = inputs.shape
+            inputs = inputs.view(-1, C, H, W)
+            outputs, features, utilization = engine.model(B, V, num_views, inputs)
+            for i in range(true_labels.size(0)):
+                true_label = true_labels[i].item()
+                if object_class[i].item() not in feature_dict[true_label]:
+                    feature_dict[true_label][object_class[i].item()] = {"features": [], "path": []}
+                feature_dict[true_label][object_class[i].item()]["features"].append(features[i].detach().cpu().numpy())
+                feature_dict[true_label][object_class[i].item()]["path"].append(train_path[i])
+
+        dissimilarity_dict = [{} for _ in range(opt.nb_classes)]
+        for class_index in range(opt.nb_classes):
+            for object_class in feature_dict[class_index]:
+                if feature_dict[class_index][object_class]["features"]:
+                    normalized_features_train = normalize(np.array(feature_dict_train[class_index][object_class]["features"]))
+                    normalized_features = normalize(np.array(feature_dict[class_index][object_class]["features"]))
+                    mean_features_train = np.mean(normalized_features_train, axis=0)
+                    for i, feature in enumerate(normalized_features):
+                        dissimilarity = cosine(feature, mean_features_train)
+                        if object_class not in dissimilarity_dict[class_index]:
+                            dissimilarity_dict[class_index][object_class] = {"dissimilarity": [], "path": []}
+                        dissimilarity_dict[class_index][object_class]["dissimilarity"].append(dissimilarity)
+                        dissimilarity_dict[class_index][object_class]["path"].append(feature_dict[class_index][object_class]["path"][i])
+
+        old_index_train = train_dataset.selected_ind_train
+        old_index_not_train = train_dataset.unselected_ind_train
+
+        for class_index in range(opt.nb_classes):
+            for object_class in dissimilarity_dict[class_index]:
+                if dissimilarity_dict[class_index][object_class]["dissimilarity"]:
+                    max_dissimilarity_index = np.argmax(dissimilarity_dict[class_index][object_class]["dissimilarity"])
+                    most_dissimilar_path = dissimilarity_dict[class_index][object_class]["path"][max_dissimilarity_index]
+
+                    old_index_train[class_index][0][object_class].append((most_dissimilar_path, object_class))
+
+                    for jdx in range(len(old_index_not_train[class_index][0][object_class])):
+                        if most_dissimilar_path == old_index_not_train[class_index][0][object_class][jdx][0]:
+                            del old_index_not_train[class_index][0][object_class][jdx]
+                            break
+        print(old_index_train)
+        return old_index_train, old_index_not_train
 
 # def random_sampling(opt, engine, train_dataset, unlabeled_data, labeled_dataset):
 #     engine.model.eval()
@@ -820,6 +944,42 @@ def random_sampling(opt, engine, train_dataset, unlabeled_data, labeled_dataset)
         print(old_index_train)
 
         return old_index_train, old_index_not_train
+
+def random_sampling_object_wise(opt, engine, train_dataset, unlabeled_data, labeled_dataset):
+    engine.model.eval()
+    with torch.no_grad():
+        path_dict = [{} for _ in range(opt.nb_classes)]  # Initialize the dictionary to store paths for each class
+
+        for index, (label, image, num_views, object_class, train_path) in enumerate(unlabeled_data):
+            targets = Variable(label).to(engine.device)
+            true_labels = torch.max(targets, 1)[1]
+
+            for i in range(true_labels.size(0)):
+                true_label = true_labels[i].item()  # Get the class index
+                if object_class[i].item() not in path_dict[true_label]:
+                    path_dict[true_label][object_class[i].item()] = []
+                path_dict[true_label][object_class[i].item()].append(train_path[i])  # Append the corresponding train path
+
+        old_index_train = train_dataset.selected_ind_train
+        old_index_not_train = train_dataset.unselected_ind_train
+
+        for class_index in range(len(path_dict)):
+            for object_class in path_dict[class_index]:
+                if path_dict[class_index][object_class]:  # Check if there are available paths for the class
+                    selected_path = random.choice(path_dict[class_index][object_class])  # Get random path
+
+                    # Append the selected_path to the corresponding sublist in old_index_train
+                    old_index_train[class_index][0][object_class].append((selected_path, object_class))
+
+                    # Remove the selected_path from the sublist in old_index_not_train at class_index
+                    for jdx in range(len(old_index_not_train[class_index][0][object_class])):
+                        if selected_path == old_index_not_train[class_index][0][object_class][jdx][0]:
+                            del old_index_not_train[class_index][0][object_class][jdx]
+                            break
+
+        print(old_index_train)
+        return old_index_train, old_index_not_train
+
 
 
 def LfOSA(opt, engine, train_dataset, unlabeled_data, labeled_dataset):
