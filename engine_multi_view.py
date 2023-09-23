@@ -14,7 +14,7 @@ class MultiViewEngine(object):
     def __init__(self, model, train_data, valid_data, num_classes, optimizer, scheduler, criterion, weight_path, device, mv_type):
         super(MultiViewEngine, self).__init__()
         self.opt = parser_2.get_parser()
-        self.model = model
+        self.model = model.to('cuda')
         self.train_data = train_data
         self.valid_data = valid_data
         self.num_classes = num_classes
@@ -42,11 +42,13 @@ class MultiViewEngine(object):
             for index, (label, image, num_views, marks) in enumerate(self.train_data):
                 self.scheduler.step(len(self.train_data)*epoch + index)
                 inputs = Variable(image).to(self.device)
+
                 targets = Variable(label).to(self.device)
                 self.optimizer.zero_grad()
                 B, V, C, H, W = inputs.shape
                 inputs = inputs.view(-1, C, H, W)
-                outputs, features = self.model(B, V, num_views, inputs)
+                # inputs = inputs.view(B, -1, H, W)
+                outputs, features_k = self.model(B, V, num_views, inputs)
                 loss = self.criterion(outputs, targets)
                 total_loss += loss.item()
                 loss.backward()
@@ -117,7 +119,7 @@ class MultiViewEngine(object):
                 targets = Variable(label).to(self.device)
                 B, V, C, H, W = inputs.shape
                 inputs = inputs.view(-1, C, H, W)
-                outputs, features, utilization = self.model(B, V, num_views, inputs)
+                outputs, features = self.model(B, V, num_views, inputs)
                 prediction = torch.max(outputs, 1)[1]
                 transform_targets = torch.max(targets, 1)[1]
                 results = (prediction == transform_targets)

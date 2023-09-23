@@ -1,4 +1,5 @@
 import os
+
 import sys
 import torch
 import random
@@ -9,6 +10,14 @@ import torch.backends.cudnn as cudnn
 from termcolor import cprint
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+
+
+from timm.data import Mixup
+from timm.models import create_model
+from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
+from timm.scheduler import create_scheduler
+from timm.optim import create_optimizer
+from timm.utils import NativeScaler, get_state_dict, ModelEma
 
 sys.dont_write_bytecode = True
 warnings.filterwarnings('ignore')
@@ -37,8 +46,8 @@ from transforms import *
 if __name__ == '__main__':
     # set options
     opt = parser_2.get_parser()
-    cprint('*' * 25 + ' Start ' + '*' * 25, 'yellow')
 
+    cprint('*' * 25 + ' Start ' + '*' * 25, 'yellow')
     # set seed
     seed = opt.SEED
     random.seed(seed)
@@ -106,6 +115,16 @@ if __name__ == '__main__':
         model_stage2 = MVFN(model_stage1, opt.FEATURE_DIM).to(device)
     elif opt.MV_TYPE == 'SMVCNN':
         model_stage2 = SMVCNN(model_stage1, opt.FEATURE_DIM, opt.SMVCNN_D, use_embed=opt.SMVCNN_USE_EMBED).to(device)
+    elif opt.MV_TYPE == 'MVT':
+        model_stage2 = create_model(
+        'vit_small_patch16_224',
+        pretrained=False,
+        num_classes=opt.nb_classes,
+        drop_rate=0.0,
+        drop_path_rate=0.1,
+        drop_block_rate=None,
+    )
+
 
     if opt.MV_FLAG in ['TEST', 'CM']:
         model_stage2.load_state_dict(torch.load(opt.MV_TEST_WEIGHT, map_location=device))
@@ -206,7 +225,7 @@ if __name__ == '__main__':
         engine = MultiViewEngine(model_stage2, train_data, valid_data, 40, optimizer, scheduler, criterion,
                                  opt.MV_WEIGHT_PATH, device, opt.MV_TYPE)
         if opt.MV_FLAG == 'TRAIN':
-            if opt.MV_TYPE in ['MVCNN_NEW', 'GVCNN', 'DAN', 'MVFN', 'SMVCNN']:
+            if opt.MV_TYPE in ['MVCNN_NEW', 'GVCNN', 'DAN', 'MVFN', 'SMVCNN', 'MVT']:
                 engine.train_base(opt.MV_EPOCHS)
             elif opt.MV_TYPE == 'CVR':
                 vert = tool.get_vert(opt.CVR_K)

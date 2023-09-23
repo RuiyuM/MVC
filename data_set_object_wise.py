@@ -82,8 +82,8 @@ class object_wise_dataset(data.Dataset):
                             image = self.transform(image)
                         images.append(image)
 
-                    for i in range(0, self.max_num_views - len(self.selected_ind_train[current_class])):
-                        images.append(torch.zeros_like(images[0]))
+                    # for i in range(0, self.max_num_views - len(self.selected_ind_train[current_class])):
+                    #     images.append(torch.zeros_like(images[0]))
                     self.data.append((label, torch.stack(images), len(self.selected_ind_train[current_class]), current_object[idx][1]))
 
         # if self.mode == 'sampling':
@@ -131,7 +131,7 @@ class object_wise_dataset(data.Dataset):
             # Shuffle the list in-place
             random.shuffle(class_files)
             # select top 50% of the object in that class
-            class_files = class_files[:len(class_files) // 50]
+            class_files = class_files[:len(class_files) // 20]
             class_differentiater_selected = [[] for _ in range(len(class_files))]
             class_differentiater_unselected = [[] for _ in range(len(class_files))]
             for idx in range(len(class_files)):
@@ -172,11 +172,11 @@ class object_wise_dataset(data.Dataset):
         else:
             record = self.video_list[index]
             current_class = record.label
-            view_indices = list(range(1, self.max_num_views + 1))
+            view_indices = list(range(1, 1 + 1))
             images = []
             label = torch.zeros(self.num_classes)
             label[current_class] = 1.0
-            marks = torch.zeros(self.max_num_views)
+            marks = torch.zeros(1)
             for idx in view_indices:
 
                 image = Image.open(record.path + self.image_tmpl.format(idx)).convert('RGB')
@@ -184,7 +184,7 @@ class object_wise_dataset(data.Dataset):
                     image = self.transform(image)
                 images.append(image)
 
-            return label, torch.stack(images), self.max_num_views, marks
+            return label, torch.stack(images), 1, marks
 
     # def __getitem__(self, index):
     #     record = self.video_list[index]

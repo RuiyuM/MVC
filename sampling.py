@@ -357,7 +357,7 @@ def calculate_similarity_bipartite(label_metric_dicts, training_metric_label_dic
 
                     vec1 = normalized_label_metrics.view(len(normalized_label_metrics), 1)
                     vec2 = normalized_training_metrics.view(1, len(normalized_training_metrics))
-                    cost_matrix = torch.matmul(vec1, vec2)
+                    cost_matrix = -torch.matmul(vec1, vec2)
                     cost_matrix_np = cost_matrix.cpu().numpy()
 
                     row_ind, col_ind = linear_sum_assignment(cost_matrix_np)
@@ -869,7 +869,7 @@ def dissimilarity_sampling_object_wise(opt, engine, train_dataset, unlabeled_dat
                         if most_dissimilar_path == old_index_not_train[class_index][0][object_class][jdx][0]:
                             del old_index_not_train[class_index][0][object_class][jdx]
                             break
-        print(old_index_train)
+        # print(old_index_train)
         return old_index_train, old_index_not_train
 
 # def random_sampling(opt, engine, train_dataset, unlabeled_data, labeled_dataset):
