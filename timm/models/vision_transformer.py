@@ -167,22 +167,22 @@ class Attention(nn.Module):
 
 class Block(nn.Module):
 
-    def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop=0., attn_drop=0.,
+    def __init__(self, block_id, dim, num_heads, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop=0., attn_drop=0.,
                  drop_path=0., act_layer=nn.GELU, norm_layer=nn.LayerNorm):
         super().__init__()
+        self.block_id = block_id  # Unique identifier for each block
         self.norm1 = norm_layer(dim)
         self.attn = Attention(
             dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop)
-        # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
         self.norm2 = norm_layer(dim)
         mlp_hidden_dim = int(dim * mlp_ratio)
         self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
-        self.extracted_k = []
+        self.extracted_k = {}  # Use a dictionary to store k values
 
     def forward(self, x):
         x, k = self.attn(self.norm1(x))
-        self.extracted_k.append(k)
+        self.extracted_k[self.block_id] = k.detach().cpu().numpy()  # Store k values with block_id as the key
         x = x + self.drop_path(x)
         x = x + self.drop_path(self.mlp(self.norm2(x)))
         return x
@@ -243,16 +243,17 @@ class VisionTransformer(nn.Module):
         self.cut = 2
         self.blocks1 = nn.Sequential(*[
             Block(
+                block_id=f"blocks1_{i}",
                 dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
                 drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[i], norm_layer=norm_layer, act_layer=act_layer)
-            for i in range(depth-self.cut)])
+            for i in range(depth - self.cut)])
 
         self.blocks2 = nn.Sequential(*[
             Block(
+                block_id=f"blocks2_{i}",
                 dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
                 drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[i], norm_layer=norm_layer, act_layer=act_layer)
             for i in range(self.cut)])
-
 
         self.norm = norm_layer(embed_dim)
 
@@ -315,12 +316,20 @@ class VisionTransformer(nn.Module):
             x = torch.cat((cls_token, self.dist_token.expand(x.shape[0], -1, -1), x), dim=1)
         x = self.pos_drop(x + self.pos_embed)
         x = self.blocks1(x)
-        list_of_k_2 = []
         B, N, C = x.shape
         x = x.reshape(B//max_num_views, N*max_num_views, C) # 8, 3940, 384
         x = self.blocks2(x)
+        all_k_tensors = []
+
         for idx in range(len(self.blocks2)):
-            list_of_k_2.append(self.blocks2[idx].extracted_k)
+            # Convert ndarray to tensor using .items()
+            key, k_ndarray = list(self.blocks2[idx].extracted_k.items())[0]
+            k_tensor = torch.tensor(k_ndarray)
+            all_k_tensors.append(k_tensor)
+
+        # Compute the element-wise average
+        average_k = torch.stack(all_k_tensors).mean(dim=0)
+        list_of_k_2 = average_k
         x = self.norm(x)
         if self.dist_token is None:
             return self.pre_logits(x[:, 0]), list_of_k_2

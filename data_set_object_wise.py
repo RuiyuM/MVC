@@ -172,11 +172,11 @@ class object_wise_dataset(data.Dataset):
         else:
             record = self.video_list[index]
             current_class = record.label
-            view_indices = list(range(1, 1 + 1))
+            view_indices = list(range(1, 2 + 1))
             images = []
             label = torch.zeros(self.num_classes)
             label[current_class] = 1.0
-            marks = torch.zeros(1)
+            marks = torch.zeros(2)
             for idx in view_indices:
 
                 image = Image.open(record.path + self.image_tmpl.format(idx)).convert('RGB')
@@ -184,7 +184,7 @@ class object_wise_dataset(data.Dataset):
                     image = self.transform(image)
                 images.append(image)
 
-            return label, torch.stack(images), 1, marks
+            return label, torch.stack(images), 2, marks
 
     # def __getitem__(self, index):
     #     record = self.video_list[index]

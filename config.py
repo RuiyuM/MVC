@@ -43,8 +43,8 @@ MV_QUERIES = 11
 QUERIES_STRATEGY = 'dissimilarity_sampling' # options: ['dissimilarity_sampling', 'uncertainty']
 
 MV_WARMUP_EPOCHS = 1
-TRAIN_MV_BS = 1
-TEST_MV_BS = 1
+TRAIN_MV_BS = 8
+TEST_MV_BS = 8
 MV_MOMENTUM = 0.9
 MV_WEIGHT_DECAY = 1e-3
 MV_LR_INIT = 1e-3
