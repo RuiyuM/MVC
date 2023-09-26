@@ -163,6 +163,7 @@ def load_pretrained(model, default_cfg=None, num_classes=1000, in_chans=3, filte
         progress (bool): enable progress bar for weight download
 
     """
+
     default_cfg = default_cfg or getattr(model, 'default_cfg', None) or {}
     pretrained_url = default_cfg.get('url', None)
     hf_hub_id = default_cfg.get('hf_hub', None)
@@ -173,8 +174,11 @@ def load_pretrained(model, default_cfg=None, num_classes=1000, in_chans=3, filte
         _logger.info(f'Loading pretrained weights from Hugging Face hub ({hf_hub_id})')
         state_dict = load_state_dict_from_hf(hf_hub_id)
     else:
+
         _logger.info(f'Loading pretrained weights from url ({pretrained_url})')
+
         state_dict = load_state_dict_from_url(pretrained_url, progress=progress, map_location='cpu')
+
     if filter_fn is not None:
         # for backwards compat with filter fn that take one arg, try one first, the two
         try:
@@ -216,8 +220,45 @@ def load_pretrained(model, default_cfg=None, num_classes=1000, in_chans=3, filte
                 state_dict[classifier_name + '.weight'] = classifier_weight[label_offset:]
                 classifier_bias = state_dict[classifier_name + '.bias']
                 state_dict[classifier_name + '.bias'] = classifier_bias[label_offset:]
+    model_state_dict = model.state_dict()
+    block1_num = 0
+    start_block1 = -1
+    start_block2 = -1
+    end_block2 = -1
+    flag = False
+    flag_2 = True
+    flag_3 = True
+    flag_4 = True
+    for i, (key, value) in enumerate(model_state_dict.items()):
+        new_key = key.split(".")
+        if new_key[0] == "blocks1" and flag_2:
+            start_block1 = i
+            flag = True
+            flag_2 = False
 
-    model.load_state_dict(state_dict, strict=strict)
+        if new_key[0] == "blocks2" and flag_3:
+            start_block2 = i
+            flag_3 = False
+        if new_key[0] == "blocks2":
+            end_block2 = i
+    end_block2 += 1
+    new_state_dict = {}
+    for i, (key, value) in enumerate(state_dict.items()):
+        new_key = key.split(".")
+        if  i >=  start_block1 and i < start_block2:
+            new_key[0] = "blocks1"
+
+        elif i >= start_block2 and i < end_block2:
+            new_key[0] = "blocks2"
+            new_key[1] = str(int(new_key[1]) - 6)
+        tmp = ".".join(new_key)
+
+        new_state_dict[tmp] = value
+
+    new_state_dict['head.weight'] = model_state_dict['head.weight']
+    new_state_dict['head.bias'] = model_state_dict['head.bias']
+
+    model.load_state_dict(new_state_dict, strict=True)
 
 
 def extract_layer(model, layer):

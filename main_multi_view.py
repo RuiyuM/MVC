@@ -47,6 +47,7 @@ if __name__ == '__main__':
     # set options
     opt = parser_2.get_parser()
 
+
     cprint('*' * 25 + ' Start ' + '*' * 25, 'yellow')
     # set seed
     seed = opt.SEED
@@ -118,7 +119,7 @@ if __name__ == '__main__':
     elif opt.MV_TYPE == 'MVT':
         model_stage2 = create_model(
         'vit_small_patch16_224',
-        pretrained=False,
+        pretrained=True,
         num_classes=opt.nb_classes,
         drop_rate=0.0,
         drop_path_rate=0.1,
