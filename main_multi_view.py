@@ -1,5 +1,5 @@
 import os
-
+import timm
 import sys
 import torch
 import random
@@ -10,15 +10,15 @@ import torch.backends.cudnn as cudnn
 from termcolor import cprint
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+# from torch.optim import AdamW
+# from timm.data import Mixup
+# from timm.models import create_model
+# from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
+# from timm.scheduler import create_scheduler
+# from timm.optim import create_optimizer
+# from timm.utils import NativeScaler, get_state_dict, ModelEma
 
-
-from timm.data import Mixup
-from timm.models import create_model
-from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
-from timm.scheduler import create_scheduler
-from timm.optim import create_optimizer
-from timm.utils import NativeScaler, get_state_dict, ModelEma
-
+from timm.models.vision_transformer import _create_vision_transformer
 sys.dont_write_bytecode = True
 warnings.filterwarnings('ignore')
 from unlabeled_Sampling_Dataset import Unlabeled_Dataset
@@ -31,6 +31,8 @@ from model.dan import DAN
 from model.cvr import CVR
 from model.mvfn import MVFN
 from model.smvcnn import SMVCNN
+from model.MVT import MVT
+
 from dataset_single_view import SingleViewDataset
 from dataset_multi_view import MultiViewDataset
 from loss import LabelCrossEntropy
@@ -117,14 +119,22 @@ if __name__ == '__main__':
     elif opt.MV_TYPE == 'SMVCNN':
         model_stage2 = SMVCNN(model_stage1, opt.FEATURE_DIM, opt.SMVCNN_D, use_embed=opt.SMVCNN_USE_EMBED).to(device)
     elif opt.MV_TYPE == 'MVT':
-        model_stage2 = create_model(
-        'vit_small_patch16_224',
-        pretrained=True,
-        num_classes=opt.nb_classes,
-        drop_rate=0.0,
-        drop_path_rate=0.1,
-        drop_block_rate=None,
-    )
+    #     model_stage2 = create_model(
+    #     'vit_small_patch16_224',
+    #     pretrained=True,
+    #     num_classes=opt.nb_classes,
+    #     drop_rate=0.0,
+    #     drop_path_rate=0.1,
+    #     drop_block_rate=None,
+    # )
+    #     model_stage2 = timm.create_model('vit_base_patch16_224', pretrained=True)
+    #     num_classes = 40  # Replace with your number of classes
+    #     model_stage2.head = torch.nn.Linear(model_stage2.head.in_features, num_classes)
+
+        model_args = dict(patch_size=16, embed_dim=768, depth=12, num_heads=12)
+        model_stage2 = _create_vision_transformer('vit_base_patch16_224', pretrained=True, **dict(model_args, **{'pretrained_cfg': None, 'pretrained_cfg_overlay': None}))
+        num_classes = 40  # Replace with your number of classes
+        model_stage2.head = torch.nn.Linear(model_stage2.head.in_features, num_classes)
 
 
     if opt.MV_FLAG in ['TEST', 'CM']:
@@ -209,8 +219,10 @@ if __name__ == '__main__':
     # define optimizer
     optimizer = optim.SGD(model_stage2.parameters(), lr=opt.MV_LR_INIT, weight_decay=opt.MV_WEIGHT_DECAY,
                           momentum=opt.MV_MOMENTUM)
-    scheduler = tool.CosineDecayLR(optimizer, T_max=opt.MV_EPOCHS * len(train_data), lr_init=opt.MV_LR_INIT,
-                                   lr_min=opt.MV_LR_END, warmup=opt.MV_WARMUP_EPOCHS * len(train_data))
+    # optimizer = AdamW(model_stage2.parameters(), lr=opt.MV_LR_INIT, weight_decay=opt.MV_WEIGHT_DECAY)
+
+    scheduler = tool.CosineDecayLR(optimizer, T_max=opt.MV_EPOCHS * len(train_dataset), lr_init=opt.MV_LR_INIT,
+                                   lr_min=opt.MV_LR_END, warmup=opt.MV_WARMUP_EPOCHS * len(train_dataset))
 
     # set path
     if opt.MV_FLAG == 'TRAIN':

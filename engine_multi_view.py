@@ -48,7 +48,7 @@ class MultiViewEngine(object):
                 B, V, C, H, W = inputs.shape
                 inputs = inputs.view(-1, C, H, W)
                 # inputs = inputs.view(B, -1, H, W)
-                outputs, features_k = self.model(B, V, num_views, inputs)
+                outputs = self.model(inputs)
                 loss = self.criterion(outputs, targets)
                 total_loss += loss.item()
                 loss.backward()
@@ -119,7 +119,7 @@ class MultiViewEngine(object):
                 targets = Variable(label).to(self.device)
                 B, V, C, H, W = inputs.shape
                 inputs = inputs.view(-1, C, H, W)
-                outputs, features = self.model(B, V, num_views, inputs)
+                outputs, features = self.model(inputs)
                 prediction = torch.max(outputs, 1)[1]
                 transform_targets = torch.max(targets, 1)[1]
                 results = (prediction == transform_targets)
