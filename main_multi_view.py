@@ -127,14 +127,14 @@ if __name__ == '__main__':
     #     drop_path_rate=0.1,
     #     drop_block_rate=None,
     # )
-    #     model_stage2 = timm.create_model('vit_base_patch16_224', pretrained=True)
-    #     num_classes = 40  # Replace with your number of classes
-    #     model_stage2.head = torch.nn.Linear(model_stage2.head.in_features, num_classes)
-
-        model_args = dict(patch_size=16, embed_dim=768, depth=12, num_heads=12)
-        model_stage2 = _create_vision_transformer('vit_base_patch16_224', pretrained=True, **dict(model_args, **{'pretrained_cfg': None, 'pretrained_cfg_overlay': None}))
+        model_stage2 = timm.create_model('vit_small_patch16_224', pretrained=True)
         num_classes = 40  # Replace with your number of classes
         model_stage2.head = torch.nn.Linear(model_stage2.head.in_features, num_classes)
+
+        # model_args = dict(patch_size=16, embed_dim=768, depth=12, num_heads=12)
+        # model_stage2 = _create_vision_transformer('vit_base_patch16_224', pretrained=True, **dict(model_args, **{'pretrained_cfg': None, 'pretrained_cfg_overlay': None}))
+        # num_classes = 40  # Replace with your number of classes
+        # model_stage2.head = torch.nn.Linear(model_stage2.head.in_features, num_classes)
 
 
     if opt.MV_FLAG in ['TEST', 'CM']:
