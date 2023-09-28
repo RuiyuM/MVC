@@ -1,5 +1,5 @@
 import os
-import timm
+# import timm
 import sys
 import torch
 import random
@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 # from torch.optim import AdamW
 # from timm.data import Mixup
-# from timm.models import create_model
+from timm.models import create_model
 # from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
 # from timm.scheduler import create_scheduler
 # from timm.optim import create_optimizer
@@ -127,7 +127,7 @@ if __name__ == '__main__':
     #     drop_path_rate=0.1,
     #     drop_block_rate=None,
     # )
-        model_stage2 = timm.create_model('vit_small_patch16_224', pretrained=True)
+        model_stage2 = create_model('vit_small_patch16_224', pretrained=True)
         num_classes = 40  # Replace with your number of classes
         model_stage2.head = torch.nn.Linear(model_stage2.head.in_features, num_classes)
 

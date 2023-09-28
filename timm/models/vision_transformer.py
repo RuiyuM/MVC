@@ -299,7 +299,7 @@ class VisionTransformer(nn.Module):
         if self.num_tokens == 2:
             self.head_dist = nn.Linear(self.embed_dim, self.num_classes) if num_classes > 0 else nn.Identity()
 
-    def forward_features(self, x):
+    def forward_features(self, x, max_num_views):
         x = self.patch_embed(x)
         cls_token = self.cls_token.expand(x.shape[0], -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
         if self.dist_token is None:
@@ -310,7 +310,7 @@ class VisionTransformer(nn.Module):
         for i in range(6):
             x = self.blocks[i](x)
         B, N, C = x.shape
-        x = x.reshape(B // 1, N * 1, C)
+        x = x.reshape(B // max_num_views, N * max_num_views, C)
         for i in range(6, 8):
             x = self.blocks[i](x)
 
@@ -332,8 +332,8 @@ class VisionTransformer(nn.Module):
         else:
             return x[:, 0], x[:, 1]
 
-    def forward(self, x):
-        x = self.forward_features(x)
+    def forward(self, batch_size, max_num_views, num_views, x):
+        x = self.forward_features(x, max_num_views)
         if self.head_dist is not None:
             x, x_dist = self.head(x[0]), self.head_dist(x[1])  # x must be a tuple
             if self.training and not torch.jit.is_scripting():
