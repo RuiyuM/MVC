@@ -53,6 +53,7 @@ class ToMeBlock(Block):
             x, self._tome_info["size"] = merge_wavg(merge, x, self._tome_info["size"])
 
         x = x + self._drop_path2(self.mlp(self.norm2(x)))
+        self.extracted_k[self.block_id] = metric.detach().cpu().numpy()
         return x
 
 

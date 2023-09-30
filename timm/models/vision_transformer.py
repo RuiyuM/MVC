@@ -169,7 +169,7 @@ class Attention(nn.Module):
 
 class Block(nn.Module):
 
-    def __init__(self,block_id, dim, num_heads, mlp_ratio=4., qkv_bias=False, drop=0., attn_drop=0.,
+    def __init__(self, block_id, dim, num_heads, mlp_ratio=4., qkv_bias=False, drop=0., attn_drop=0.,
                  drop_path=0., act_layer=nn.GELU, norm_layer=nn.LayerNorm):
         super().__init__()
         self.block_id = block_id
