@@ -48,7 +48,8 @@ class MultiViewEngine(object):
                 B, V, C, H, W = inputs.shape
                 inputs = inputs.view(-1, C, H, W)
                 # inputs = inputs.view(B, -1, H, W)
-                outputs, features_k = self.model(B, V, num_views, inputs)
+                # outputs, features_k = self.model(B, V, num_views, inputs)
+                outputs = self.model(inputs)
                 loss = self.criterion(outputs, targets)
                 total_loss += loss.item()
                 loss.backward()
