@@ -658,7 +658,7 @@ def uncertainty_sampling(opt, engine, train_dataset, unlabeled_data, labeled_dat
             targets = Variable(label).to(engine.device)
             B, V, C, H, W = inputs.shape
             inputs = inputs.view(-1, C, H, W)
-            outputs, features, utilization = engine.model(B, V, num_views, inputs)
+            outputs, features = engine.model(B, V, num_views, inputs)
 
             softmax_outputs = torch.nn.functional.softmax(outputs, dim=1)  # Calculate softmax for entropy computation
             entropy = -torch.sum(softmax_outputs * torch.log2(softmax_outputs + 1e-6),
@@ -701,7 +701,7 @@ def uncertainty_sampling_one_label_multi_Ob(opt, engine, train_dataset, unlabele
             true_labels = torch.max(targets, 1)[1]
             B, V, C, H, W = inputs.shape
             inputs = inputs.view(-1, C, H, W)
-            outputs, features, utilization = engine.model(B, V, num_views, inputs)
+            outputs, features = engine.model(B, V, num_views, inputs)
 
             softmax_outputs = torch.nn.functional.softmax(outputs, dim=1)
             entropy = -torch.sum(softmax_outputs * torch.log2(softmax_outputs + 1e-6), dim=1)
@@ -824,7 +824,10 @@ def dissimilarity_sampling_object_wise(opt, engine, train_dataset, unlabeled_dat
             true_labels = torch.max(targets, 1)[1]
             B, V, C, H, W = inputs.shape
             inputs = inputs.view(-1, C, H, W)
-            outputs, features, utilization = engine.model(B, V, num_views, inputs)
+            outputs, features = engine.model(B, V, num_views, inputs)
+            features = F.max_pool2d(features, kernel_size=8, stride=8)
+            features = features.mean(dim=1).squeeze(0)
+            features = features.reshape(-1)
             for i in range(true_labels.size(0)):
                 true_label = true_labels[i].item()
                 if object_class[i].item() not in feature_dict_train[true_label]:
@@ -840,7 +843,10 @@ def dissimilarity_sampling_object_wise(opt, engine, train_dataset, unlabeled_dat
             true_labels = torch.max(targets, 1)[1]
             B, V, C, H, W = inputs.shape
             inputs = inputs.view(-1, C, H, W)
-            outputs, features, utilization = engine.model(B, V, num_views, inputs)
+            outputs, features = engine.model(B, V, num_views, inputs)
+            features = F.max_pool2d(features, kernel_size=8, stride=8)
+            features = features.mean(dim=1).squeeze(0)
+            features = features.reshape(-1)
             for i in range(true_labels.size(0)):
                 true_label = true_labels[i].item()
                 if object_class[i].item() not in feature_dict[true_label]:
