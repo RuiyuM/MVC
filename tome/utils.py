@@ -50,8 +50,8 @@ def benchmark(
     warm_up = int(runs * throw_out)
     total = 0
     start = time.time()
-    with torch.cuda.amp.autocast(enabled=use_fp16):
-    # with torch.autocast(device.type, enabled=use_fp16):
+
+    with torch.autocast(device.type, enabled=use_fp16):
         with torch.no_grad():
             for i in tqdm(range(runs), disable=not verbose, desc="Benchmarking"):
                 if i == warm_up:

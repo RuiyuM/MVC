@@ -35,7 +35,6 @@ class ToMeBlock(Block):
         # Note: this is copied from timm.models.vision_transformer.Block with modifications.
         attn_size = self._tome_info["size"] if self._tome_info["prop_attn"] else None
         x_attn, metric = self.attn(self.norm1(x), attn_size)
-        self._tome_info["metric"].append(metric)
         x = x + self._drop_path1(x_attn)
 
         r = self._tome_info["r"].pop(0)
@@ -108,7 +107,6 @@ def make_tome_class(transformer_class):
             self._tome_info["r"] = parse_r(len(self.blocks), self.r)
             self._tome_info["size"] = None
             self._tome_info["source"] = None
-            self._tome_info["metric"] = []
 
             return super().forward(*args, **kwdargs)
 
@@ -116,7 +114,7 @@ def make_tome_class(transformer_class):
 
 
 def apply_patch(
-    model: VisionTransformer, trace_source: bool = True, prop_attn: bool = True
+    model: VisionTransformer, trace_source: bool = False, prop_attn: bool = True
 ):
     """
     Applies ToMe to this transformer. Afterward, set r using model.r.
