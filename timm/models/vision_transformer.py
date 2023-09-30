@@ -314,17 +314,17 @@ class VisionTransformer(nn.Module):
         for i in range(6, 8):
             x = self.blocks[i](x)
 
-        all_k_tensors = []
+        # all_k_tensors = []
 
-        for idx in range(6, 8):
+        # for idx in range(6, 8):
             # Convert ndarray to tensor using .items()
-            key, k_ndarray = list(self.blocks[idx].extracted_k.items())[0]
-            k_tensor = torch.tensor(k_ndarray)
-            all_k_tensors.append(k_tensor)
+        key, k_ndarray = list(self.blocks[7].extracted_k.items())[0]
+        k_tensor = torch.tensor(k_ndarray)
+        # all_k_tensors.append(k_tensor)
 
         # Compute the element-wise average
-        average_k = torch.stack(all_k_tensors).mean(dim=0)
-        self.list_of_k_2 = average_k
+        # average_k = torch.stack(all_k_tensors).mean(dim=0)
+        self.list_of_k_2 = k_tensor
         # x = self.blocks(x)
         x = self.norm(x)
         if self.dist_token is None:
