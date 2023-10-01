@@ -62,29 +62,13 @@ class object_wise_dataset(data.Dataset):
         self.data = []
         # print(len(self.selected_ind_train) * len(self.selected_ind_train[0][0]))
         if self.mode == 'train':
-
-            # marks = torch.zeros(self.max_num_views)
-
             for current_class in range(len(self.selected_ind_train)):
-                # label = torch.full((self.max_num_views,), current_class, dtype=torch.int)
                 for current_object in self.selected_ind_train[current_class][0]:
-
-                    images = []
                     label = torch.zeros(self.num_classes)
                     label[current_class] = 1.0
-                    # number_of_image_tuple = int(len(self.selected_ind_train[current_class][0]))
-                    # print(self.selected_ind_train[current_class][0])
-                    for idx in range(len(current_object)):
-                        # print(current_object[idx][0].type)
-                        # print(self.selected_ind_train[current_class][0][idx] + self.image_tmpl.format(i))
-                        image = Image.open(str(current_object[idx][0])).convert('RGB')
-                        if self.transform:
-                            image = self.transform(image)
-                        images.append(image)
-
-                    # for i in range(0, self.max_num_views - len(self.selected_ind_train[current_class])):
-                    #     images.append(torch.zeros_like(images[0]))
-                    self.data.append((label, torch.stack(images), len(self.selected_ind_train[current_class]), current_object[idx][1]))
+                    image_paths = [str(img_path[0]) for img_path in current_object]
+                    self.data.append(
+                        (label, image_paths, len(self.selected_ind_train[current_class]), current_object[-1][1]))
 
         # if self.mode == 'sampling':
         #     images = []
@@ -165,8 +149,14 @@ class object_wise_dataset(data.Dataset):
 
     def __getitem__(self, index):
         if self.mode == 'train':
-
-            return self.data[index]
+            label, image_paths, num_selected, obj_info = self.data[index]
+            images = []
+            for img_path in image_paths:
+                image = Image.open(img_path).convert('RGB')
+                if self.transform:
+                    image = self.transform(image)
+                images.append(image)
+            return label, torch.stack(images), num_selected, obj_info
 
 
         else:
