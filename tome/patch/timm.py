@@ -34,7 +34,7 @@ class ToMeBlock(Block):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Note: this is copied from timm.models.vision_transformer.Block with modifications.
         attn_size = self._tome_info["size"] if self._tome_info["prop_attn"] else None
-        x_attn, metric = self.attn(self.norm1(x), attn_size)
+        x_attn, metric, sampling_k = self.attn(self.norm1(x), attn_size)
         x = x + self._drop_path1(x_attn)
 
         r = self._tome_info["r"].pop(0)
@@ -53,7 +53,7 @@ class ToMeBlock(Block):
             x, self._tome_info["size"] = merge_wavg(merge, x, self._tome_info["size"])
 
         x = x + self._drop_path2(self.mlp(self.norm2(x)))
-        self.extracted_k[self.block_id] = metric.detach().cpu().numpy()
+        self.extracted_k[self.block_id] = sampling_k.detach().cpu().numpy()
         return x
 
 
@@ -66,7 +66,7 @@ class ToMeAttention(Attention):
 
     def forward(
         self, x: torch.Tensor, size: torch.Tensor = None
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.tensor]:
         # Note: this is copied from timm.models.vision_transformer.Attention with modifications.
         B, N, C = x.shape
         qkv = (
@@ -79,6 +79,11 @@ class ToMeAttention(Attention):
             qkv[1],
             qkv[2],
         )  # make torchscript happy (cannot use tensor as tuple)
+
+        # 1. Remove the class token
+        k_no_class_token = k[:, :, 1:, :].clone()
+        batch_size, num_heads, _, feature = k_no_class_token.shape
+        sampling_k = k_no_class_token.reshape(batch_size, num_heads * feature, -1)
 
         attn = (q @ k.transpose(-2, -1)) * self.scale
 
@@ -94,7 +99,7 @@ class ToMeAttention(Attention):
         x = self.proj_drop(x)
 
         # Return k as well here
-        return x, k.mean(1)
+        return x, k.mean(1), sampling_k
 
 
 def make_tome_class(transformer_class):

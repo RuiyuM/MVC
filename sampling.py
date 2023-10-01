@@ -162,8 +162,9 @@ def patch_based_selection_DAN(opt, engine, train_dataset, unlabeled_data, labele
                 true_label = true_labels[i].item()  # Convert tensor to Python scalar
                 # For each list in metrics, take the i-th element and add to a new list
                 new_metric_list = metrics[i]
-                token_number, token_dimension = new_metric_list.shape
-                new_metric_list = new_metric_list.reshape(token_number * token_dimension)
+                # token_number, token_dimension = new_metric_list.shape
+                # token_number = new_metric_list.shape
+                # new_metric_list = new_metric_list.reshape(token_number * token_dimension)
                 # Check if the label exists in the dictionary
                 # print(object_class[i].item())
                 if object_class[i].item() not in label_metric_dict[true_label]:
@@ -191,8 +192,8 @@ def patch_based_selection_DAN(opt, engine, train_dataset, unlabeled_data, labele
                 true_label = true_labels[i].item()  # Convert tensor to Python scalar
                 # For each list in metrics, take the i-th element and add to a new list
                 new_metric_list = metrics[i]
-                token_number, token_dimension = new_metric_list.shape
-                new_metric_list = new_metric_list.reshape(token_number * token_dimension)
+                # token_number, token_dimension = new_metric_list.shape
+                # new_metric_list = new_metric_list.reshape(token_number * token_dimension)
                 path = train_path[i]  # Get the train path for this image
                 if object_class[i].item() not in training_metric_label_dict[true_label]:
                     training_metric_label_dict[true_label][object_class[i].item()] = []
@@ -300,7 +301,6 @@ def coursetofine(opt, engine, train_dataset, unlabeled_data, labeled_data, train
             B, V, C, H, W = inputs.shape
             inputs = inputs.view(-1, C, H, W)
             outputs, metrics = engine.model(B, V, num_views, inputs)
-
             # batch_size, token_dimension = features.shape
             # metrics = engine.model.k_value.reshape(len(true_labels), 1, token_dimension)
 
@@ -545,15 +545,10 @@ def calculate_similarity_bipartite(label_metric_dicts, training_metric_label_dic
 
                 for label_metrics in label_metrics_list:
                     # cost_distance = calculate_distance(label_metrics, training_metrics)
+                    # 196 * 768 @ 768 * 196 = 196 * 196
 
-                    label_metrics = label_metrics.reshape(-1)
-                    training_metrics = training_metrics.reshape(-1)
-                    normalized_label_metrics = F.normalize(label_metrics, p=2, dim=0)
-                    normalized_training_metrics = F.normalize(training_metrics, p=2, dim=0)
-
-                    vec1 = normalized_label_metrics.view(len(normalized_label_metrics), 1)
-                    vec2 = normalized_training_metrics.view(1, len(normalized_training_metrics))
-                    cost_matrix = torch.matmul(vec1, vec2)
+                    # training_metrics = training_metrics.t()
+                    cost_matrix = torch.mm(label_metrics.t(), training_metrics)
                     cost_matrix_np = cost_matrix.cpu().numpy()
 
                     row_ind, col_ind = linear_sum_assignment(cost_matrix_np)
