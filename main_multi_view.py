@@ -46,6 +46,60 @@ from unlabeled_dataset_object_wise import unlabeled_object_wise_dataset
 import torchvision.transforms as transforms
 from transforms import *
 
+
+
+def generate_sampling_dataset(selected_ind_train, unselected_ind_train, opt):
+    train_txt = 'v2_trainmodel40.txt'
+    test_txt = 'v2_testmodel40.txt'
+    img_ext = 'png'
+    views_number = opt.MAX_NUM_VIEWS
+    unlabeled_sampling_labeled_data = selected_ind_train
+
+    unlabeled_sampling_unlabeled_data = unselected_ind_train
+
+    # if opt.DATA_SET == 'M40v2':
+    opt.nb_classes = 40  # ModelNet40 class number
+    labeled_dataset = unlabeled_object_wise_dataset("", train_txt, 40, 'labeled',
+
+                                                    image_tmpl="_{:03d}." + img_ext,
+
+                                                    max_num_views=views_number,
+                                                    view_number=opt.view_num,
+                                                    transform=transforms.Compose(
+                                                        [transforms.RandomHorizontalFlip(),
+                                                         transforms.ToTensor(),
+                                                         transforms.Normalize(
+                                                             mean=[0.485, 0.456, 0.406],
+                                                             std=[0.229, 0.224, 0.225])
+                                                         ]),
+                                                    selected_ind_train=unlabeled_sampling_labeled_data,
+                                                    unselected_ind_train=unlabeled_sampling_unlabeled_data)
+    unlabeled_dataset = unlabeled_object_wise_dataset("", test_txt, 40, 'unlabeled',
+                                                      image_tmpl="_{:03d}." + img_ext,
+
+                                                      max_num_views=views_number,
+                                                      transform=torchvision.transforms.Compose(
+                                                          [transforms.ToTensor(),
+                                                           transforms.Normalize(
+                                                               mean=[0.485, 0.456,
+                                                                     0.406],
+                                                               std=[0.229, 0.224, 0.225])
+                                                           ]),
+                                                      selected_ind_train=unlabeled_sampling_labeled_data,
+                                                      unselected_ind_train=unlabeled_sampling_unlabeled_data
+                                                      )
+
+    labeled_data = DataLoader(labeled_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS,
+                              shuffle=True,
+                              pin_memory=True, worker_init_fn=tool.seed_worker)
+
+    unlabeled_data = DataLoader(unlabeled_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS,
+                                shuffle=False,
+                                pin_memory=True, worker_init_fn=tool.seed_worker)
+    return labeled_data, unlabeled_data
+
+
+
 if __name__ == '__main__':
     # set options
     opt = parser_2.get_parser()
@@ -132,7 +186,7 @@ if __name__ == '__main__':
         num_classes = 40  # Replace with your number of classes
         model_stage2.head = torch.nn.Linear(model_stage2.head.in_features, num_classes)
         tome.patch.timm(model_stage2)
-        model_stage2.r = 4
+        model_stage2.r = 0
         # model_args = dict(patch_size=16, embed_dim=768, depth=12, num_heads=12)
         # model_stage2 = _create_vision_transformer('vit_base_patch16_224', pretrained=True, **dict(model_args, **{'pretrained_cfg': None, 'pretrained_cfg_overlay': None}))
         # num_classes = 40  # Replace with your number of classes
@@ -275,7 +329,6 @@ if __name__ == '__main__':
 
         cprint('*' * 25 + ' Finish Training start sampling ' + '*' * 25, 'yellow')
         if opt.DATA_SET == 'M40v2':
-            max_views = opt.MAX_NUM_VIEWS
             unlabeled_sampling_labeled_data = train_dataset.selected_ind_train
 
             unlabeled_sampling_unlabeled_data = train_dataset.unselected_ind_train
@@ -313,23 +366,11 @@ if __name__ == '__main__':
                                                               unselected_ind_train=unlabeled_sampling_unlabeled_data
                                                               )
 
-            # sampler_train = torch.utils.data.DistributedSampler(
-            #     train_dataset, num_replicas=1, rank=0, shuffle=True
-            # )
-            # sampler_val = torch.utils.data.SequentialSampler(valid_dataset)
 
             labeled_data = DataLoader(labeled_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS,
                                       shuffle=True,
                                       pin_memory=True, worker_init_fn=tool.seed_worker)
-            # batch = next(iter(data_loader_train))
-            # valid_data = DataLoader(
-            #     valid_dataset, sampler=sampler_val,
-            #     batch_size=int(1.5 * opt.TRAIN_MV_BS),
-            #     # batch_size=8,
-            #     num_workers=opt.NUM_WORKERS,
-            #     pin_memory=True,
-            #     drop_last=False
-            # )
+
             unlabeled_data = DataLoader(unlabeled_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS,
                                         shuffle=False,
                                         pin_memory=True, worker_init_fn=tool.seed_worker)
@@ -384,6 +425,19 @@ if __name__ == '__main__':
                 train_data,
                 unlabeled_sampling_labeled_data,
                 unlabeled_sampling_unlabeled_data
+            )
+
+        if opt.QUERIES_STRATEGY == 'course_to_fine':
+            selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.coursetofine(
+                opt,
+                engine,
+                train_dataset,
+                unlabeled_data,
+                labeled_data,
+                train_data,
+                unlabeled_sampling_labeled_data,
+                unlabeled_sampling_unlabeled_data,
+                model_stage2
             )
 
         if opt.QUERIES_STRATEGY == 'random':

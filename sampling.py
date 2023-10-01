@@ -27,6 +27,15 @@ import utils as tool
 from multiprocessing import Pool
 import time
 import copy
+from tome.utils import parse_r
+from timm.models.layers.patch_embed import PatchEmbed
+import torch.nn as nn
+import torchvision.models as models
+from main_multi_view import generate_sampling_dataset
+
+
+
+
 
 def patch_based_selection(opt, engine, train_dataset, unlabeled_data, labeled_dataset, train_data,
                           unlabeled_sampling_labeled_data,
@@ -144,8 +153,7 @@ def patch_based_selection_DAN(opt, engine, train_dataset, unlabeled_data, labele
             B, V, C, H, W = inputs.shape
             inputs = inputs.view(-1, C, H, W)
             outputs, metrics = engine.model(B, V, num_views, inputs)
-            metrics = F.max_pool2d(metrics, kernel_size=8, stride=8)
-            metrics = metrics.mean(dim=1).squeeze(0)
+
 
             # batch_size, token_dimension = features.shape
             # metrics = engine.model.k_value.reshape(len(true_labels), 1, token_dimension)
@@ -173,8 +181,6 @@ def patch_based_selection_DAN(opt, engine, train_dataset, unlabeled_data, labele
             B, V, C, H, W = inputs.shape
             inputs = inputs.view(-1, C, H, W)
             outputs, metrics = engine.model(B, V, num_views, inputs)
-            metrics = F.max_pool2d(metrics, kernel_size=8, stride=8)
-            metrics = metrics.mean(dim=1).squeeze(0)
             true_labels = torch.max(targets, 1)[1]  # This is now a tensor of labels for the batch
 
             # batch_size, token_dimension = features.shape
@@ -223,6 +229,188 @@ def patch_based_selection_DAN(opt, engine, train_dataset, unlabeled_data, labele
 
 
     return old_index_train, old_index_not_train
+
+
+# def change_patch_size(transformer_class):
+#     class Change_patch_size_class(transformer_class):
+#         """
+#         Modifications:
+#         - Initialize r, token size, and token sources.
+#         - For MAE: make global average pooling proportional to token size
+#         """
+#
+#         def forward(self, *args, **kwdargs) -> torch.Tensor:
+#             self._tome_info["r"] = parse_r(len(self.blocks), self.r)
+#             self._tome_info["size"] = None
+#             self._tome_info["source"] = None
+#             # last_element = F.avg_pool2d(args[-1], kernel_size=2, stride=2)
+#             # modified_args = args[:-1] + (last_element,)
+#
+#             return super().forward(*args, **kwdargs)
+#
+#     return Change_patch_size_class
+
+class ReducePatch(PatchEmbed):
+    """
+    Modifications:
+     - Apply proportional attention
+     - Return the mean of k over heads from attention
+    """
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # B, C, H, W = x.shape
+        # assert H == self.img_size[0] and W == self.img_size[1], \
+        #     f"Input image size ({H}*{W}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
+        # mobilenet_v2 = models.mobilenet_v2(pretrained=True)
+        # mobilenet_v2.cuda()
+        # features = nn.Sequential(*list(mobilenet_v2.features.children())[:7])
+        resnet18 = models.resnet18(pretrained=True).cuda()
+        resnet18.eval()
+        # Use layers up to the third layer (this will give 1/4 downsample for 224x224 input)
+        features = nn.Sequential(*list(resnet18.children())[:-4])
+
+
+        x = features(x)
+        channel_reducer = nn.Conv2d(x.size(1), 3, kernel_size=1).cuda()
+        x = channel_reducer(x)
+
+        x = self.proj(x)
+        if self.flatten:
+            x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
+        x = self.norm(x)
+        return x
+
+
+def coursetofine(opt, engine, train_dataset, unlabeled_data, labeled_data, train_data,
+                          unlabeled_sampling_labeled_data,
+                          unlabeled_sampling_unlabeled_data, model_stage2):
+    engine.model.eval()
+    label_metric_dict = [{} for _ in range(opt.nb_classes)]
+    # for module in model_stage2.modules():
+    #     if isinstance(module, PatchEmbed):
+    #         module.__class__ = ReducePatch
+    model_stage2.r = 20
+    with torch.no_grad():
+
+        for index, (label, image, num_views, object_class) in enumerate(labeled_data):
+            inputs = Variable(image).to(engine.device)
+            targets = Variable(label).to(engine.device)
+            true_labels = torch.max(targets, 1)[1]
+            # print(true_labels.shape)
+            B, V, C, H, W = inputs.shape
+            inputs = inputs.view(-1, C, H, W)
+            outputs, metrics = engine.model(B, V, num_views, inputs)
+
+            # batch_size, token_dimension = features.shape
+            # metrics = engine.model.k_value.reshape(len(true_labels), 1, token_dimension)
+
+            for i in range(true_labels.size(0)):
+                true_label = true_labels[i].item()  # Convert tensor to Python scalar
+                # For each list in metrics, take the i-th element and add to a new list
+                new_metric_list = metrics[i]
+                token_number, token_dimension = new_metric_list.shape
+                new_metric_list = new_metric_list.reshape(token_number * token_dimension)
+                # Check if the label exists in the dictionary
+                # print(object_class[i].item())
+                if object_class[i].item() not in label_metric_dict[true_label]:
+                    label_metric_dict[true_label][object_class[i].item()] = []
+                # Add new_metric_list to dictionary
+                label_metric_dict[true_label][object_class[i].item()].append(new_metric_list)
+
+    with torch.no_grad():
+        training_metric_label_dict = [{} for _ in range(opt.nb_classes)]
+
+        # First pass: collect features and paths
+        for index, (label, image, num_views, object_class, train_path) in enumerate(unlabeled_data):
+            inputs = Variable(image).to(engine.device)
+            targets = Variable(label).to(engine.device)
+            B, V, C, H, W = inputs.shape
+            inputs = inputs.view(-1, C, H, W)
+            outputs, metrics = engine.model(B, V, num_views, inputs)
+            true_labels = torch.max(targets, 1)[1]  # This is now a tensor of labels for the batch
+
+            # batch_size, token_dimension = features.shape
+            # metrics = engine.model.k_value.reshape(len(true_labels), 1, token_dimension)
+
+            # Loop over the batch
+            for i in range(true_labels.size(0)):
+                true_label = true_labels[i].item()  # Convert tensor to Python scalar
+                # For each list in metrics, take the i-th element and add to a new list
+                new_metric_list = metrics[i]
+                token_number, token_dimension = new_metric_list.shape
+                new_metric_list = new_metric_list.reshape(token_number * token_dimension)
+                path = train_path[i]  # Get the train path for this image
+                if object_class[i].item() not in training_metric_label_dict[true_label]:
+                    training_metric_label_dict[true_label][object_class[i].item()] = []
+                # Add new_metric_list and train_path to dictionary
+                training_metric_label_dict[true_label][object_class[i].item()].append([new_metric_list, path])
+
+        old_index_not_train = get_dissimilar_paths_list(training_metric_label_dict, label_metric_dict)
+        old_index_train = train_dataset.selected_ind_train
+
+        labeled_data, unlabeled_data = generate_sampling_dataset(old_index_train, old_index_not_train, opt)
+        engine.model.r = 0
+        old_index_train, old_index_not_train = patch_based_selection_DAN(opt, engine, train_dataset, unlabeled_data, labeled_data, train_data,
+                                      unlabeled_sampling_labeled_data,
+                                      unlabeled_sampling_unlabeled_data)
+
+    return old_index_train, old_index_not_train
+
+
+def compute_distance(matrix1, matrix2):
+    # Using Euclidean distance as an example
+    return torch.norm(matrix1 - matrix2)
+
+
+# def get_dissimilar_paths_list(training_metric_label_dict, label_metric_dict):
+#     # Initialize the new list with empty dictionaries
+#     new_list = [{} for _ in range(len(training_metric_label_dict))]
+#
+#     # Iterate over each coarse label
+#     for coarse_label in range(len(training_metric_label_dict)):
+#         # Iterate over each fine label
+#         for fine_label in training_metric_label_dict[coarse_label].keys():
+#             distances = []
+#             # For each matrix in training_metric_label_dict, compute its distance to the matrix in label_metric_dict
+#             for metric_list, path in training_metric_label_dict[coarse_label][fine_label]:
+#                 label_metric = label_metric_dict[coarse_label][fine_label][0]
+#                 distance = compute_distance(metric_list, label_metric)
+#                 distances.append((distance, metric_list, path))
+#
+#             # Sort by distance in descending order and select the top 5
+#             sorted_distances = sorted(distances, key=lambda x: x[0], reverse=True)[:5]
+#
+#             # Store the top 5 most dissimilar matrices in the new list
+#             new_list[coarse_label][fine_label] = [(metric_list, path) for _, metric_list, path in sorted_distances]
+#
+#     return new_list
+
+def get_dissimilar_paths_list(training_metric_label_dict, label_metric_dict):
+    # Initialize the new list with empty lists
+    new_list = [[[[] for _ in training_metric_label_dict[coarse_label]]] for coarse_label in range(len(training_metric_label_dict))]
+
+    # Iterate over each coarse label
+    for coarse_label in range(len(training_metric_label_dict)):
+        # Iterate over each fine label
+        for fine_label_idx, fine_label in enumerate(training_metric_label_dict[coarse_label].keys()):
+            distances = []
+            # For each matrix in training_metric_label_dict, compute its distance to the matrix in label_metric_dict
+            for metric_list, path in training_metric_label_dict[coarse_label][fine_label]:
+                label_metric = label_metric_dict[coarse_label][fine_label][0]
+                distance = compute_distance(metric_list, label_metric)
+                distances.append((distance, path))
+
+            # Sort by distance in descending order and select the top 5
+            sorted_distances = sorted(distances, key=lambda x: x[0], reverse=True)[:5]
+
+            # Store the top 5 most dissimilar paths in the new list
+            for _, path in sorted_distances:
+                new_list[coarse_label][0][fine_label_idx].append((path, fine_label))
+
+    return new_list
+
+
+
 
 def calculate_distance_DAN(args):
     label_metrics, training_metrics, true_label, path = args
