@@ -115,7 +115,7 @@ class object_wise_dataset(data.Dataset):
             # Shuffle the list in-place
             random.shuffle(class_files)
             # select top 50% of the object in that class
-            class_files = class_files[:len(class_files) // 20]
+            class_files = class_files[:len(class_files) // 5]
             class_differentiater_selected = [[] for _ in range(len(class_files))]
             class_differentiater_unselected = [[] for _ in range(len(class_files))]
             for idx in range(len(class_files)):
@@ -162,11 +162,11 @@ class object_wise_dataset(data.Dataset):
         else:
             record = self.video_list[index]
             current_class = record.label
-            view_indices = list(range(1, 2 + 1))
+            view_indices = list(range(1, 20 + 1))
             images = []
             label = torch.zeros(self.num_classes)
             label[current_class] = 1.0
-            marks = torch.zeros(2)
+            marks = torch.zeros(20)
             for idx in view_indices:
 
                 image = Image.open(record.path + self.image_tmpl.format(idx)).convert('RGB')
@@ -174,7 +174,7 @@ class object_wise_dataset(data.Dataset):
                     image = self.transform(image)
                 images.append(image)
 
-            return label, torch.stack(images), 2, marks
+            return label, torch.stack(images), 20, marks
 
     # def __getitem__(self, index):
     #     record = self.video_list[index]

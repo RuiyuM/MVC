@@ -549,6 +549,7 @@ def calculate_similarity_bipartite(label_metric_dicts, training_metric_label_dic
 
                     # training_metrics = training_metrics.t()
                     cost_matrix = torch.mm(label_metrics.t(), training_metrics)
+                    # cost_matrix = torch.mm(label_metrics, training_metrics.t())
                     cost_matrix_np = cost_matrix.cpu().numpy()
 
                     row_ind, col_ind = linear_sum_assignment(cost_matrix_np)
@@ -926,7 +927,7 @@ def uncertainty_sampling_one_label_multi_Ob(opt, engine, train_dataset, unlabele
                         del old_index_not_train[class_index][0][object_class][jdx]
                         break
 
-        print(old_index_train)
+
         return old_index_train, old_index_not_train
 
 
@@ -1174,7 +1175,7 @@ def random_sampling_object_wise(opt, engine, train_dataset, unlabeled_data, labe
                             del old_index_not_train[class_index][0][object_class][jdx]
                             break
 
-        print(old_index_train)
+
         return old_index_train, old_index_not_train
 
 
