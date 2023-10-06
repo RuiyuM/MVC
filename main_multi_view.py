@@ -127,31 +127,9 @@ if __name__ == '__main__':
 
     # # define model
     model_stage1 = SVCNN(opt.NUM_CLASSES, opt.ARCHITECTURE, opt.FEATURE_DIM, pretrained=True).to(device)
-    #
-    # # define dataset
-    # train_dataset = SingleViewDataset(opt.CLASSES, opt.GROUPS, opt.NUM_CLASSES, opt.DATA_ROOT, 'train', opt.SV_TYPE,
-    #                                   use_train=True)
-    # if opt.MV_FLAG == 'TRAIN':
-    #     cprint('*' * 15 + ' Stage 1 ' + '*' * 15, 'yellow')
-    #     print('Number of Training Images:', len(train_dataset))
-    #
-    # train_data = DataLoader(train_dataset, batch_size=opt.TRAIN_SV_BS, num_workers=opt.NUM_WORKERS, shuffle=True,
-    #                         pin_memory=True, worker_init_fn=tool.seed_worker)
-    #
-    # # define optimizer
-    # optimizer = optim.SGD(model_stage1.parameters(), lr=opt.SV_LR_INIT, weight_decay=opt.SV_WEIGHT_DECAY,
-    #                       momentum=opt.SV_MOMENTUM)
-    #
     # # define criterion
     criterion = LabelCrossEntropy()
-    #
-    # # define engine
-    # engine = SingleViewEngine(model_stage1, train_data, None, opt.NUM_CLASSES, opt.GROUPS, optimizer, opt.SV_TYPE,
-    #                           criterion, opt.SV_WEIGHT_PATH, opt.SV_OUTPUT_PATH, device, single_view=False)
 
-    # run single view
-    # if opt.MV_FLAG == 'TRAIN':
-    #     engine.train_base(opt.SV_EPOCHS, len(train_dataset))
 
     if opt.MV_FLAG == 'TRAIN':
         cprint('*' * 15 + ' Stage 2 ' + '*' * 15, 'yellow')
@@ -174,23 +152,13 @@ if __name__ == '__main__':
     elif opt.MV_TYPE == 'SMVCNN':
         model_stage2 = SMVCNN(model_stage1, opt.FEATURE_DIM, opt.SMVCNN_D, use_embed=opt.SMVCNN_USE_EMBED).to(device)
     elif opt.MV_TYPE == 'MVT':
-    #     model_stage2 = create_model(
-    #     'vit_small_patch16_224',
-    #     pretrained=True,
-    #     num_classes=opt.nb_classes,
-    #     drop_rate=0.0,
-    #     drop_path_rate=0.1,
-    #     drop_block_rate=None,
-    # )
+
         model_stage2 = create_model('vit_small_patch16_224', pretrained=False)
         num_classes = 40  # Replace with your number of classes
         model_stage2.head = torch.nn.Linear(model_stage2.head.in_features, num_classes)
         tome.patch.timm(model_stage2)
         model_stage2.r = 0
-        # model_args = dict(patch_size=16, embed_dim=768, depth=12, num_heads=12)
-        # model_stage2 = _create_vision_transformer('vit_base_patch16_224', pretrained=True, **dict(model_args, **{'pretrained_cfg': None, 'pretrained_cfg_overlay': None}))
-        # num_classes = 40  # Replace with your number of classes
-        # model_stage2.head = torch.nn.Linear(model_stage2.head.in_features, num_classes)
+
 
 
     if opt.MV_FLAG in ['TEST', 'CM']:
@@ -231,22 +199,11 @@ if __name__ == '__main__':
                                                                                           std=[0.229, 0.224, 0.225])
                                                                                       ]))
 
-        # sampler_train = torch.utils.data.DistributedSampler(
-        #     train_dataset, num_replicas=1, rank=0, shuffle=True
-        # )
-        # sampler_val = torch.utils.data.SequentialSampler(valid_dataset)
+
 
         train_data = DataLoader(train_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS, shuffle=True,
                                 pin_memory=True, worker_init_fn=tool.seed_worker)
-        # batch = next(iter(train_data))
-        # valid_data = DataLoader(
-        #     valid_dataset, sampler=sampler_val,
-        #     batch_size=int(1.5 * opt.TRAIN_MV_BS),
-        #     # batch_size=8,
-        #     num_workers=opt.NUM_WORKERS,
-        #     pin_memory=True,
-        #     drop_last=False
-        # )
+
         valid_data = DataLoader(valid_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS, shuffle=False,
                                 pin_memory=True, worker_init_fn=tool.seed_worker)
 
@@ -257,8 +214,7 @@ if __name__ == '__main__':
         # batch = next(iter(dataloader))
         valid_dataset = MultiViewDataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'valid', opt.MAX_NUM_VIEWS,
                                          use_train=False)
-        # dataloader = DataLoader(valid_dataset, batch_size=32, shuffle=True)
-        # batch = next(iter(dataloader))
+
         test_dataset = MultiViewDataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'test', opt.MAX_NUM_VIEWS,
                                         use_train=False)
         train_data = DataLoader(train_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS, shuffle=True,
@@ -268,9 +224,8 @@ if __name__ == '__main__':
         test_data = DataLoader(test_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS, shuffle=False,
                                pin_memory=True, worker_init_fn=tool.seed_worker)
     if opt.MV_FLAG in ['TRAIN', 'TEST']:
-        print('Number of Training Sets:', len(train_dataset))
-        # print('Number of Valid Sets:', len(valid_dataset))
-        # print('Number of Test Sets:', len(test_dataset))
+        print('Number of Training Sets:', len(train_dataset.data))
+
 
     # define optimizer
     optimizer = optim.SGD(model_stage2.parameters(), lr=opt.MV_LR_INIT, weight_decay=opt.MV_WEIGHT_DECAY,
@@ -285,7 +240,7 @@ if __name__ == '__main__':
         if not os.path.exists(opt.MV_WEIGHT_PATH):
             os.mkdir(opt.MV_WEIGHT_PATH)
 
-    # define engine
+    # define engine for other model like DAN
     # engine = MultiViewEngine(model_stage2, train_data, valid_data, opt.NUM_CLASSES, optimizer, scheduler, criterion,
     #                          opt.MV_WEIGHT_PATH, device, opt.MV_TYPE)
 
@@ -328,6 +283,7 @@ if __name__ == '__main__':
             tool.plot_confusion_matrix(confusion_matrix, opt.GROUPS, opt.MV_TYPE)
 
         cprint('*' * 25 + ' Finish Training start sampling ' + '*' * 25, 'yellow')
+        # define the sampling dataset
         if opt.DATA_SET == 'M40v2':
             unlabeled_sampling_labeled_data = train_dataset.selected_ind_train
 
@@ -396,7 +352,7 @@ if __name__ == '__main__':
             labeled_data = DataLoader(labeled_dataset, batch_size=opt.TEST_MV_BS, num_workers=opt.NUM_WORKERS,
                                       shuffle=False,
                                       pin_memory=True, worker_init_fn=tool.seed_worker)
-            # batch = next(iter(unlabeled_data))
+
         print(opt.QUERIES_STRATEGY)
         if opt.QUERIES_STRATEGY == 'uncertainty':
             selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.uncertainty_sampling_one_label_multi_Ob(opt,
@@ -404,7 +360,7 @@ if __name__ == '__main__':
                                                                                                                     train_dataset,
                                                                                                                     unlabeled_data,
                                                                                                                     labeled_dataset)
-
+        # view based selection
         if opt.QUERIES_STRATEGY == 'dissimilarity_sampling':
             selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.dissimilarity_sampling_object_wise(
                 opt,

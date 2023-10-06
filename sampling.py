@@ -149,24 +149,16 @@ def patch_based_selection_DAN(opt, engine, train_dataset, unlabeled_data, labele
             inputs = Variable(image).to(engine.device)
             targets = Variable(label).to(engine.device)
             true_labels = torch.max(targets, 1)[1]
-            # print(true_labels.shape)
             B, V, C, H, W = inputs.shape
             inputs = inputs.view(-1, C, H, W)
-            outputs, metrics = engine.model(B, V, num_views, inputs)
+            # outputs is prediction, metrics is K, features is features before linear layer
+            outputs, metrics, features = engine.model(B, V, num_views, inputs)
 
-
-            # batch_size, token_dimension = features.shape
-            # metrics = engine.model.k_value.reshape(len(true_labels), 1, token_dimension)
 
             for i in range(true_labels.size(0)):
                 true_label = true_labels[i].item()  # Convert tensor to Python scalar
-                # For each list in metrics, take the i-th element and add to a new list
+
                 new_metric_list = metrics[i]
-                # token_number, token_dimension = new_metric_list.shape
-                # token_number = new_metric_list.shape
-                # new_metric_list = new_metric_list.reshape(token_number * token_dimension)
-                # Check if the label exists in the dictionary
-                # print(object_class[i].item())
                 if object_class[i].item() not in label_metric_dict[true_label]:
                     label_metric_dict[true_label][object_class[i].item()] = []
                 # Add new_metric_list to dictionary
@@ -181,19 +173,16 @@ def patch_based_selection_DAN(opt, engine, train_dataset, unlabeled_data, labele
             targets = Variable(label).to(engine.device)
             B, V, C, H, W = inputs.shape
             inputs = inputs.view(-1, C, H, W)
-            outputs, metrics = engine.model(B, V, num_views, inputs)
+            # outputs is prediction, metrics is K, features is features before linear layer
+            outputs, metrics, features = engine.model(B, V, num_views, inputs)
             true_labels = torch.max(targets, 1)[1]  # This is now a tensor of labels for the batch
 
-            # batch_size, token_dimension = features.shape
-            # metrics = engine.model.k_value.reshape(len(true_labels), 1, token_dimension)
 
             # Loop over the batch
             for i in range(true_labels.size(0)):
                 true_label = true_labels[i].item()  # Convert tensor to Python scalar
                 # For each list in metrics, take the i-th element and add to a new list
                 new_metric_list = metrics[i]
-                # token_number, token_dimension = new_metric_list.shape
-                # new_metric_list = new_metric_list.reshape(token_number * token_dimension)
                 path = train_path[i]  # Get the train path for this image
                 if object_class[i].item() not in training_metric_label_dict[true_label]:
                     training_metric_label_dict[true_label][object_class[i].item()] = []
@@ -300,7 +289,7 @@ def coursetofine(opt, engine, train_dataset, unlabeled_data, labeled_data, train
             # print(true_labels.shape)
             B, V, C, H, W = inputs.shape
             inputs = inputs.view(-1, C, H, W)
-            outputs, metrics = engine.model(B, V, num_views, inputs)
+            outputs, metrics, features = engine.model(B, V, num_views, inputs)
             # batch_size, token_dimension = features.shape
             # metrics = engine.model.k_value.reshape(len(true_labels), 1, token_dimension)
 
@@ -326,7 +315,7 @@ def coursetofine(opt, engine, train_dataset, unlabeled_data, labeled_data, train
             targets = Variable(label).to(engine.device)
             B, V, C, H, W = inputs.shape
             inputs = inputs.view(-1, C, H, W)
-            outputs, metrics = engine.model(B, V, num_views, inputs)
+            outputs, metrics, features = engine.model(B, V, num_views, inputs)
             true_labels = torch.max(targets, 1)[1]  # This is now a tensor of labels for the batch
 
             # batch_size, token_dimension = features.shape
@@ -548,7 +537,7 @@ def calculate_similarity_bipartite(label_metric_dicts, training_metric_label_dic
                     # 196 * 768 @ 768 * 196 = 196 * 196
 
                     # training_metrics = training_metrics.t()
-                    cost_matrix = torch.mm(label_metrics.t(), training_metrics)
+                    cost_matrix = torch.mm(label_metrics.t(), training_metrics) # 196*196
                     # cost_matrix = torch.mm(label_metrics, training_metrics.t())
                     cost_matrix_np = cost_matrix.cpu().numpy()
 
@@ -885,7 +874,7 @@ def uncertainty_sampling_one_label_multi_Ob(opt, engine, train_dataset, unlabele
             true_labels = torch.max(targets, 1)[1]
             B, V, C, H, W = inputs.shape
             inputs = inputs.view(-1, C, H, W)
-            outputs, features = engine.model(B, V, num_views, inputs)
+            outputs, features_k, features = engine.model(B, V, num_views, inputs)
 
             softmax_outputs = torch.nn.functional.softmax(outputs, dim=1)
             entropy = -torch.sum(softmax_outputs * torch.log2(softmax_outputs + 1e-6), dim=1)
@@ -1008,16 +997,18 @@ def dissimilarity_sampling_object_wise(opt, engine, train_dataset, unlabeled_dat
             true_labels = torch.max(targets, 1)[1]
             B, V, C, H, W = inputs.shape
             inputs = inputs.view(-1, C, H, W)
-            outputs, features = engine.model(B, V, num_views, inputs)
-            features = F.max_pool2d(features, kernel_size=8, stride=8)
-            features = features.mean(dim=1).squeeze(0)
-            features = features.reshape(-1)
+            outputs, features_k, features = engine.model(B, V, num_views, inputs)
+            # features = F.max_pool2d(features, kernel_size=8, stride=8)
+            # features = features.mean(dim=1).squeeze(0)
+            # features = features.reshape(-1)
             for i in range(true_labels.size(0)):
                 true_label = true_labels[i].item()
                 if object_class[i].item() not in feature_dict_train[true_label]:
                     feature_dict_train[true_label][object_class[i].item()] = {"features": []}
                 feature_dict_train[true_label][object_class[i].item()]["features"].append(
                     features[i].detach().cpu().numpy())
+            del inputs, targets, outputs, features_k, features, true_labels
+            torch.cuda.empty_cache()
 
     with torch.no_grad():
         feature_dict = [{} for _ in range(opt.nb_classes)]
@@ -1027,16 +1018,18 @@ def dissimilarity_sampling_object_wise(opt, engine, train_dataset, unlabeled_dat
             true_labels = torch.max(targets, 1)[1]
             B, V, C, H, W = inputs.shape
             inputs = inputs.view(-1, C, H, W)
-            outputs, features = engine.model(B, V, num_views, inputs)
-            features = F.max_pool2d(features, kernel_size=8, stride=8)
-            features = features.mean(dim=1).squeeze(0)
-            features = features.reshape(-1)
+            outputs, features_k, features = engine.model(B, V, num_views, inputs)
+            # features = F.max_pool2d(features, kernel_size=8, stride=8)
+            # features = features.mean(dim=1).squeeze(0)
+            # features = features.reshape(-1)
             for i in range(true_labels.size(0)):
                 true_label = true_labels[i].item()
                 if object_class[i].item() not in feature_dict[true_label]:
                     feature_dict[true_label][object_class[i].item()] = {"features": [], "path": []}
                 feature_dict[true_label][object_class[i].item()]["features"].append(features[i].detach().cpu().numpy())
                 feature_dict[true_label][object_class[i].item()]["path"].append(train_path[i])
+            del inputs, targets, outputs, features_k, features, true_labels
+            torch.cuda.empty_cache()
 
         dissimilarity_dict = [{} for _ in range(opt.nb_classes)]
         for class_index in range(opt.nb_classes):

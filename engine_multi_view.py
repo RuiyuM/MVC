@@ -48,23 +48,26 @@ class MultiViewEngine(object):
                 B, V, C, H, W = inputs.shape
                 inputs = inputs.view(-1, C, H, W)
                 # inputs = inputs.view(B, -1, H, W)
-                outputs, features_k = self.model(B, V, num_views, inputs)
+                outputs, features_k, features = self.model(B, V, num_views, inputs)
                 # outputs = self.model(inputs)
                 loss = self.criterion(outputs, targets)
                 total_loss += loss.item()
                 loss.backward()
                 self.optimizer.step()
+                # Delete variables and clear GPU cache
+                del inputs, targets, outputs, features_k, features, loss
+                torch.cuda.empty_cache()
 
             script = ('Epoch:[ %d | %d ]    Loss: %.4f    ') % (epoch + 1, epochs, total_loss)
             print(script)
 
             # evaluation
-            if epoch == epochs - 1:
-                with torch.no_grad():
-                    overall_accuracy = self.valid()
-
-                # save best model
-                self.save_model_weights(epoch, overall_accuracy)
+            # if epoch == epochs - 1:
+            #     with torch.no_grad():
+            #         overall_accuracy = self.valid()
+            #
+            #     # save best model
+            #     self.save_model_weights(epoch, overall_accuracy)
 
             # get remaining time
             current_time = time.time()
@@ -96,12 +99,12 @@ class MultiViewEngine(object):
             print(script)
 
             #evaluation
-            if epoch == epochs - 1:
-                with torch.no_grad():
-                    overall_accuracy = self.valid()
-
-                # save best model
-                self.save_model_weights(epoch, overall_accuracy)
+            # if epoch == epochs - 1:
+            #     with torch.no_grad():
+            #         overall_accuracy = self.valid()
+            #
+            #     # save best model
+            #     self.save_model_weights(epoch, overall_accuracy)
 
             # get remaining time
             current_time = time.time()
@@ -120,13 +123,17 @@ class MultiViewEngine(object):
                 targets = Variable(label).to(self.device)
                 B, V, C, H, W = inputs.shape
                 inputs = inputs.view(-1, C, H, W)
-                outputs, features = self.model(B, V, num_views, inputs)
+                outputs, features_k, features = self.model(B, V, num_views, inputs)
                 prediction = torch.max(outputs, 1)[1]
                 transform_targets = torch.max(targets, 1)[1]
                 results = (prediction == transform_targets)
                 correct_points = torch.sum(results.long())
                 all_correct_points += correct_points
                 all_points += results.size()[0]
+
+                # Delete variables and clear GPU cache
+                del inputs, targets, outputs, features_k, features, prediction, transform_targets, results, correct_points
+                torch.cuda.empty_cache()
 
         overall_accuracy = (all_correct_points.float() / all_points).cpu().data.numpy()
         print('MVA:', '%.2f' % (100 * overall_accuracy))

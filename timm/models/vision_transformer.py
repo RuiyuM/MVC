@@ -342,8 +342,9 @@ class VisionTransformer(nn.Module):
             else:
                 return (x + x_dist) / 2
         else:
+            features = x
             x = self.head(x)
-        return x, self.list_of_k_2
+        return x, self.list_of_k_2, features
 
 
 def _init_vit_weights(m, n: str = '', head_bias: float = 0., jax_impl: bool = False):
