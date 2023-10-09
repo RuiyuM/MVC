@@ -151,13 +151,9 @@ if __name__ == '__main__':
         model_stage2 = MVFN(model_stage1, opt.FEATURE_DIM).to(device)
     elif opt.MV_TYPE == 'SMVCNN':
         model_stage2 = SMVCNN(model_stage1, opt.FEATURE_DIM, opt.SMVCNN_D, use_embed=opt.SMVCNN_USE_EMBED).to(device)
-    elif opt.MV_TYPE == 'MVT':
 
-        model_stage2 = create_model('vit_small_patch16_224', pretrained=False)
-        num_classes = 40  # Replace with your number of classes
-        model_stage2.head = torch.nn.Linear(model_stage2.head.in_features, num_classes)
-        tome.patch.timm(model_stage2)
-        model_stage2.r = 0
+
+
 
 
 
@@ -188,7 +184,7 @@ if __name__ == '__main__':
                                                                               mean=[0.485, 0.456, 0.406],
                                                                               std=[0.229, 0.224, 0.225])
                                                                           ]))
-        print(train_dataset.selected_ind_train)
+        # print(train_dataset.selected_ind_train)
         valid_dataset = object_wise_dataset("", test_txt, 40, 'valid',
                                             image_tmpl="_{:03d}." + img_ext,
 
@@ -227,14 +223,6 @@ if __name__ == '__main__':
         print('Number of Training Sets:', len(train_dataset.data))
 
 
-    # define optimizer
-    optimizer = optim.SGD(model_stage2.parameters(), lr=opt.MV_LR_INIT, weight_decay=opt.MV_WEIGHT_DECAY,
-                          momentum=opt.MV_MOMENTUM)
-    # optimizer = AdamW(model_stage2.parameters(), lr=opt.MV_LR_INIT, weight_decay=opt.MV_WEIGHT_DECAY)
-
-    scheduler = tool.CosineDecayLR(optimizer, T_max=opt.MV_EPOCHS * len(train_dataset), lr_init=opt.MV_LR_INIT,
-                                   lr_min=opt.MV_LR_END, warmup=opt.MV_WARMUP_EPOCHS * len(train_dataset))
-
     # set path
     if opt.MV_FLAG == 'TRAIN':
         if not os.path.exists(opt.MV_WEIGHT_PATH):
@@ -246,6 +234,21 @@ if __name__ == '__main__':
 
     # run multi-view
     for query in tqdm(range(opt.MV_QUERIES)):
+        # creat model
+        if opt.MV_TYPE == 'MVT':
+            model_stage2 = create_model('vit_small_patch16_224', pretrained=True)
+            num_classes = 40  # Replace with your number of classes
+            model_stage2.head = torch.nn.Linear(model_stage2.head.in_features, num_classes)
+            tome.patch.timm(model_stage2)
+            model_stage2.r = 0
+            # define optimizer
+            optimizer = optim.SGD(model_stage2.parameters(), lr=opt.MV_LR_INIT, weight_decay=opt.MV_WEIGHT_DECAY,
+                                  momentum=opt.MV_MOMENTUM)
+            # optimizer = AdamW(model_stage2.parameters(), lr=opt.MV_LR_INIT, weight_decay=opt.MV_WEIGHT_DECAY)
+
+            scheduler = tool.CosineDecayLR(optimizer, T_max=opt.MV_EPOCHS * len(train_dataset), lr_init=opt.MV_LR_INIT,
+                                           lr_min=opt.MV_LR_END, warmup=opt.MV_WARMUP_EPOCHS * len(train_dataset))
+
         engine = MultiViewEngine(model_stage2, train_data, valid_data, 40, optimizer, scheduler, criterion,
                                  opt.MV_WEIGHT_PATH, device, opt.MV_TYPE)
         if opt.MV_FLAG == 'TRAIN':
