@@ -115,7 +115,7 @@ class object_wise_dataset(data.Dataset):
             # Shuffle the list in-place
             random.shuffle(class_files)
             # select top 50% of the object in that class
-            class_files = class_files[:len(class_files) // 5]
+            class_files = class_files[:len(class_files) // 20]
             class_differentiater_selected = [[] for _ in range(len(class_files))]
             class_differentiater_unselected = [[] for _ in range(len(class_files))]
             for idx in range(len(class_files)):

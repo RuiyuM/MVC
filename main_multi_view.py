@@ -134,32 +134,6 @@ if __name__ == '__main__':
     if opt.MV_FLAG == 'TRAIN':
         cprint('*' * 15 + ' Stage 2 ' + '*' * 15, 'yellow')
 
-    # define model
-    if opt.MV_TYPE == 'MVCNN_NEW':
-        model_stage2 = MVCNNNew(model_stage1).to(device)
-    elif opt.MV_TYPE == 'GVCNN':
-        model_stage2 = GVCNN(model_stage1, opt.GVCNN_M, opt.ARCHITECTURE, opt.IMAGE_SIZE).to(device)
-    elif opt.MV_TYPE == 'DAN':
-        model_stage2 = DAN(model_stage1, opt.DAN_H, opt.FEATURE_DIM, opt.DAN_NUM_HEADS_F, opt.DAN_INNER_DIM_F,
-                           opt.DAN_DROPOUT_F).to(device)
-    elif opt.MV_TYPE == 'CVR':
-        model_stage2 = CVR(model_stage1, opt.CVR_K, opt.FEATURE_DIM, opt.CVR_NUM_HEADS_F, opt.CVR_INNER_DIM_F,
-                           opt.CVR_NORM_EPS_F,
-                           opt.CVR_OTK_HEADS_F, opt.CVR_OTK_EPS_F, opt.CVR_OTK_MAX_ITER_F, opt.CVR_DROPOUT_F,
-                           opt.CVR_COORD_DIM_F).to(device)
-    elif opt.MV_TYPE == 'MVFN':
-        model_stage2 = MVFN(model_stage1, opt.FEATURE_DIM).to(device)
-    elif opt.MV_TYPE == 'SMVCNN':
-        model_stage2 = SMVCNN(model_stage1, opt.FEATURE_DIM, opt.SMVCNN_D, use_embed=opt.SMVCNN_USE_EMBED).to(device)
-
-
-
-
-
-
-    if opt.MV_FLAG in ['TEST', 'CM']:
-        model_stage2.load_state_dict(torch.load(opt.MV_TEST_WEIGHT, map_location=device))
-        model_stage2.eval()
 
     # define dataset
     if opt.DATA_SET == 'M40v2':
@@ -234,20 +208,41 @@ if __name__ == '__main__':
 
     # run multi-view
     for query in tqdm(range(opt.MV_QUERIES)):
-        # creat model
+        # define model at every query so it will not become continue learning
+        if opt.MV_TYPE == 'MVCNN_NEW':
+            model_stage2 = MVCNNNew(model_stage1).to(device)
+        elif opt.MV_TYPE == 'GVCNN':
+            model_stage2 = GVCNN(model_stage1, opt.GVCNN_M, opt.ARCHITECTURE, opt.IMAGE_SIZE).to(device)
+        elif opt.MV_TYPE == 'DAN':
+            model_stage2 = DAN(model_stage1, opt.DAN_H, opt.FEATURE_DIM, opt.DAN_NUM_HEADS_F, opt.DAN_INNER_DIM_F,
+                               opt.DAN_DROPOUT_F).to(device)
+        elif opt.MV_TYPE == 'CVR':
+            model_stage2 = CVR(model_stage1, opt.CVR_K, opt.FEATURE_DIM, opt.CVR_NUM_HEADS_F, opt.CVR_INNER_DIM_F,
+                               opt.CVR_NORM_EPS_F,
+                               opt.CVR_OTK_HEADS_F, opt.CVR_OTK_EPS_F, opt.CVR_OTK_MAX_ITER_F, opt.CVR_DROPOUT_F,
+                               opt.CVR_COORD_DIM_F).to(device)
+        elif opt.MV_TYPE == 'MVFN':
+            model_stage2 = MVFN(model_stage1, opt.FEATURE_DIM).to(device)
+        elif opt.MV_TYPE == 'SMVCNN':
+            model_stage2 = SMVCNN(model_stage1, opt.FEATURE_DIM, opt.SMVCNN_D, use_embed=opt.SMVCNN_USE_EMBED).to(
+                device)
         if opt.MV_TYPE == 'MVT':
             model_stage2 = create_model('vit_small_patch16_224', pretrained=True)
             num_classes = 40  # Replace with your number of classes
             model_stage2.head = torch.nn.Linear(model_stage2.head.in_features, num_classes)
             tome.patch.timm(model_stage2)
             model_stage2.r = 0
-            # define optimizer
-            optimizer = optim.SGD(model_stage2.parameters(), lr=opt.MV_LR_INIT, weight_decay=opt.MV_WEIGHT_DECAY,
+        # define optimizer
+        optimizer = optim.SGD(model_stage2.parameters(), lr=opt.MV_LR_INIT, weight_decay=opt.MV_WEIGHT_DECAY,
                                   momentum=opt.MV_MOMENTUM)
-            # optimizer = AdamW(model_stage2.parameters(), lr=opt.MV_LR_INIT, weight_decay=opt.MV_WEIGHT_DECAY)
+        # optimizer = AdamW(model_stage2.parameters(), lr=opt.MV_LR_INIT, weight_decay=opt.MV_WEIGHT_DECAY)
 
-            scheduler = tool.CosineDecayLR(optimizer, T_max=opt.MV_EPOCHS * len(train_dataset), lr_init=opt.MV_LR_INIT,
+        scheduler = tool.CosineDecayLR(optimizer, T_max=opt.MV_EPOCHS * len(train_dataset), lr_init=opt.MV_LR_INIT,
                                            lr_min=opt.MV_LR_END, warmup=opt.MV_WARMUP_EPOCHS * len(train_dataset))
+
+        if opt.MV_FLAG in ['TEST', 'CM']:
+            model_stage2.load_state_dict(torch.load(opt.MV_TEST_WEIGHT, map_location=device))
+            model_stage2.eval()
 
         engine = MultiViewEngine(model_stage2, train_data, valid_data, 40, optimizer, scheduler, criterion,
                                  opt.MV_WEIGHT_PATH, device, opt.MV_TYPE)
@@ -382,8 +377,6 @@ if __name__ == '__main__':
                 unlabeled_data,
                 labeled_data,
                 train_data,
-                unlabeled_sampling_labeled_data,
-                unlabeled_sampling_unlabeled_data
             )
 
         if opt.QUERIES_STRATEGY == 'course_to_fine':

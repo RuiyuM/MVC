@@ -139,10 +139,11 @@ def patch_based_selection(opt, engine, train_dataset, unlabeled_data, labeled_da
 
 
 def patch_based_selection_DAN(opt, engine, train_dataset, unlabeled_data, labeled_data, train_data,
-                          unlabeled_sampling_labeled_data,
-                          unlabeled_sampling_unlabeled_data):
+
+                          ):
     engine.model.eval()
-    label_metric_dict = [{} for _ in range(opt.nb_classes)]
+    # the label_K_dict is a variable that store the K value for selected object's view
+    label_K_dict = [{} for _ in range(opt.nb_classes)]
     with torch.no_grad():
 
         for index, (label, image, num_views, object_class) in enumerate(labeled_data):
@@ -152,20 +153,21 @@ def patch_based_selection_DAN(opt, engine, train_dataset, unlabeled_data, labele
             B, V, C, H, W = inputs.shape
             inputs = inputs.view(-1, C, H, W)
             # outputs is prediction, metrics is K, features is features before linear layer
-            outputs, metrics, features = engine.model(B, V, num_views, inputs)
+            outputs, k_metrics, features = engine.model(B, V, num_views, inputs)
 
 
             for i in range(true_labels.size(0)):
                 true_label = true_labels[i].item()  # Convert tensor to Python scalar
 
-                new_metric_list = metrics[i]
-                if object_class[i].item() not in label_metric_dict[true_label]:
-                    label_metric_dict[true_label][object_class[i].item()] = []
+                new_metric_list = k_metrics[i]
+                if object_class[i].item() not in label_K_dict[true_label]:
+                    label_K_dict[true_label][object_class[i].item()] = []
                 # Add new_metric_list to dictionary
-                label_metric_dict[true_label][object_class[i].item()].append(new_metric_list)
+                label_K_dict[true_label][object_class[i].item()].append(new_metric_list)
 
     with torch.no_grad():
-        training_metric_label_dict = [{} for _ in range(opt.nb_classes)]
+        # training_K_selected_dict is a variable which store the K for the rest unselected objects' view
+        training_K_selected_dict = [{} for _ in range(opt.nb_classes)]
 
         # First pass: collect features and paths
         for index, (label, image, num_views, object_class, train_path) in enumerate(unlabeled_data):
@@ -174,7 +176,7 @@ def patch_based_selection_DAN(opt, engine, train_dataset, unlabeled_data, labele
             B, V, C, H, W = inputs.shape
             inputs = inputs.view(-1, C, H, W)
             # outputs is prediction, metrics is K, features is features before linear layer
-            outputs, metrics, features = engine.model(B, V, num_views, inputs)
+            outputs, k_metrics, features = engine.model(B, V, num_views, inputs)
             true_labels = torch.max(targets, 1)[1]  # This is now a tensor of labels for the batch
 
 
@@ -182,16 +184,16 @@ def patch_based_selection_DAN(opt, engine, train_dataset, unlabeled_data, labele
             for i in range(true_labels.size(0)):
                 true_label = true_labels[i].item()  # Convert tensor to Python scalar
                 # For each list in metrics, take the i-th element and add to a new list
-                new_metric_list = metrics[i]
+                new_metric_list = k_metrics[i]
                 path = train_path[i]  # Get the train path for this image
-                if object_class[i].item() not in training_metric_label_dict[true_label]:
-                    training_metric_label_dict[true_label][object_class[i].item()] = []
+                if object_class[i].item() not in training_K_selected_dict[true_label]:
+                    training_K_selected_dict[true_label][object_class[i].item()] = []
                 # Add new_metric_list and train_path to dictionary
-                training_metric_label_dict[true_label][object_class[i].item()].append([new_metric_list, path])
+                training_K_selected_dict[true_label][object_class[i].item()].append([new_metric_list, path])
 
 
 
-        selected_path = calculate_similarity_bipartite(label_metric_dict, training_metric_label_dict)
+        selected_path = calculate_similarity_bipartite(label_K_dict, training_K_selected_dict)
 
         old_index_train = train_dataset.selected_ind_train
         old_index_not_train = train_dataset.unselected_ind_train
@@ -518,6 +520,10 @@ def calculate_distance(x, y):
 #     return new_list
 
 def calculate_similarity_bipartite(label_metric_dicts, training_metric_label_dicts):
+    # so the structures for label_metric_dicts and training_metric_label_dicts are
+    # class -> object_class -> K; so we need to loop through them to extract the K values and perform
+    # the calculation.
+    # we first find the most similar view within object_class and find the most dissimilar in class wise
     start_time = time.time()
     selected_paths = [[] for _ in range(len(label_metric_dicts))]
     new_list = [[] for _ in range(len(label_metric_dicts))]
@@ -572,10 +578,6 @@ def calculate_similarity_bipartite(label_metric_dicts, training_metric_label_dic
             not_selected_score.append(unselected_paths_for_class[0])
             new_list[idx][0][jdx].append((selected_paths_for_class, jdx))
 
-    print(new_list)
-    # print(score_)
-    # print(not_selected_list)
-    # print(not_selected_score)
     return new_list
 
 
