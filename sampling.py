@@ -907,6 +907,7 @@ def uncertainty_sampling_one_label_multi_Ob(opt, engine, train_dataset, unlabele
 
 
 
+
                 old_index_train[class_index][0][object_class].append((current_path, object_class))
 
                 for jdx in range(len(old_index_not_train[class_index][0][object_class])):
@@ -1266,7 +1267,7 @@ def LfOSA(opt, engine, train_dataset, unlabeled_data, labeled_dataset):
 def bayesian_generative_active_learning(opt, engine, train_dataset, unlabeled_data, labeled_dataset):
     engine.model.eval()
     path_dict = {i: {"uncertainty": [], "path": []} for i in
-                 range(44)}  # Initialize the dictionary to store paths and uncertainties for each class
+                 range(opt.nb_classes)}  # Initialize the dictionary to store paths and uncertainties for each class
 
     with torch.no_grad():
         for index, (label, image, num_views, marks, train_path) in enumerate(unlabeled_data):
@@ -1274,7 +1275,7 @@ def bayesian_generative_active_learning(opt, engine, train_dataset, unlabeled_da
             targets = Variable(label).to(engine.device)
             B, V, C, H, W = inputs.shape
             inputs = inputs.view(-1, C, H, W)
-            outputs, features, utilization = engine.model(B, V, num_views, inputs)
+            outputs, features_k, features = engine.model(B, V, num_views, inputs)
 
             _, predicted = outputs.max(1)
             transform_targets = torch.max(targets, 1)[1]
@@ -1290,7 +1291,7 @@ def bayesian_generative_active_learning(opt, engine, train_dataset, unlabeled_da
     old_index_train = train_dataset.selected_ind_train
     old_index_not_train = train_dataset.unselected_ind_train
 
-    for class_index in range(44):
+    for class_index in range(opt.nb_classes):
         if path_dict[class_index]["path"]:  # Check if there are available paths for the class
             # sort paths by their uncertainties and select the one with the highest uncertainty
             sorted_indices = np.argsort(-np.array(path_dict[class_index]["uncertainty"]))
@@ -1299,6 +1300,59 @@ def bayesian_generative_active_learning(opt, engine, train_dataset, unlabeled_da
             old_index_train[class_index].append(selected_path)  # Add the selected path to the training set
             if selected_path in old_index_not_train[class_index]:  # Remove the selected path from the unlabeled set
                 old_index_not_train[class_index].remove(selected_path)
+
+    return old_index_train, old_index_not_train
+
+
+def bayesian_generative_active_learning_object_wise(opt, engine, train_dataset, unlabeled_data, labeled_dataset):
+    engine.model.eval()
+    uncertainty_dict = [{} for _ in range(opt.nb_classes)]
+
+    with torch.no_grad():
+        for index, (label, image, num_views, marks, train_path) in enumerate(unlabeled_data):
+            inputs = Variable(image).to(engine.device)
+            targets = Variable(label).to(engine.device)
+            B, V, C, H, W = inputs.shape
+            inputs = inputs.view(-1, C, H, W)
+            outputs, features_k, features = engine.model(B, V, num_views, inputs)
+
+            _, predicted = outputs.max(1)
+            true_labels = torch.max(targets, 1)[1]
+            proba_out = torch.nn.functional.softmax(outputs, dim=1)
+            proba_out = torch.gather(proba_out, 1, predicted.unsqueeze(1))
+
+            uncertainty = 1 - proba_out.squeeze().cpu().numpy()
+            for i in range(len(true_labels)):
+                true_label = true_labels[i].item()
+                path = train_path[i]
+                current_uncertainty = uncertainty[i]
+                object_class = marks[
+                    i].item()  # Assuming `marks` can be used similarly to `object_class` in the first function
+
+                if object_class not in uncertainty_dict[true_label]:
+                    uncertainty_dict[true_label][object_class] = []
+                uncertainty_dict[true_label][object_class].append([current_uncertainty, path])
+            del inputs, targets, outputs, features_k, features, true_labels
+            torch.cuda.empty_cache()
+
+    old_index_train = train_dataset.selected_ind_train
+    old_index_not_train = train_dataset.unselected_ind_train
+
+    for class_index in range(len(uncertainty_dict)):
+        selected_path = uncertainty_dict[class_index]
+        for object_class, value_ in selected_path.items():
+            sorted_uncertainty = sorted(value_, key=lambda x: x[0], reverse=True)
+            max_uncertainty = sorted_uncertainty[0][0]
+            current_path = sorted_uncertainty[0][1]
+
+            old_index_train[class_index][0][object_class].append((current_path, object_class))
+
+            for jdx in range(len(old_index_not_train[class_index][0][object_class])):
+                x1 = current_path
+                x2 = old_index_not_train[class_index][0][object_class][jdx][0]
+                if x1 == x2:
+                    del old_index_not_train[class_index][0][object_class][jdx]
+                    break
 
     return old_index_train, old_index_not_train
 
@@ -1318,7 +1372,6 @@ def compute_openmax_scores(activations, mavs, weibull_models, labels, known_clas
 # Weibull CDF calculation
 def weibull_cdf(x, params):
     return 1 - np.exp(-((x / params[0]) ** params[1]))
-
 
 def open_max(opt, engine, labeled_dataset, train_dataset, unlabeled_data):
     engine.model.eval()
@@ -1400,21 +1453,121 @@ def open_max(opt, engine, labeled_dataset, train_dataset, unlabeled_data):
 
     return old_index_train, old_index_not_train
 
+def open_max_object_wise(opt, engine, labeled_dataset, train_dataset, unlabeled_data):
+    engine.model.eval()
+    score_dict = [{} for _ in range(opt.nb_classes)]
+
+    with torch.no_grad():
+        # First part: calculating the mavs and weibull_models using the labeled dataset
+        features_dict = {i: [] for i in range(opt.nb_classes)}
+
+        for index, (label, image, num_views, marks) in enumerate(labeled_dataset):
+            inputs = Variable(image).to(engine.device)
+            targets = Variable(label).to(engine.device)
+            B, V, C, H, W = inputs.shape
+            inputs = inputs.view(-1, C, H, W)
+            outputs, features_k, features = engine.model(B, V, num_views, inputs)
+            predicted = torch.max(outputs, 1)[1]
+            transform_targets = torch.max(targets, 1)[1]
+
+            for i in range(len(transform_targets)):
+                class_index = transform_targets[i].item()
+                features_dict[class_index].append(features[i].detach().cpu().numpy())
+
+        mavs = {c: np.mean(features, axis=0) for c, features in features_dict.items()}
+
+        weibull_models = {c: {"distances": [], "params": [], "mean_distance": 0, "inv_std_distance": 0} for c in
+                          range(opt.nb_classes)}
+
+        def weibull_pdf(x, shape, scale):
+            return (shape / scale) * (x / scale) ** (shape - 1) * np.exp(- (x / scale) ** shape)
+
+        def neg_log_likelihood(params):
+            return -np.sum(np.log(weibull_pdf(distances_normalized, *params)))
+
+        for c in range(opt.nb_classes):
+            distances = [distance.euclidean(f, mavs[c]) for f in features_dict[c]]
+            mean_distance = np.mean(distances)
+            std_distance = np.std(distances)
+            distances_normalized = (distances - mean_distance) / std_distance
+
+            initial_guess = [1, 1]
+            bounds = [(0.1, None), (0.1, None)]
+            result = minimize(neg_log_likelihood, initial_guess, bounds=bounds)
+
+            weibull_models[c]["distances"] = distances
+            weibull_models[c]["mean_distance"] = mean_distance
+            weibull_models[c]["inv_std_distance"] = 1 / std_distance
+            weibull_models[c]["params"] = result.x
+
+        # Second part: calculating the score using the unlabeled dataset
+        with torch.no_grad():
+            for index, (label, image, num_views, marks, train_path) in enumerate(unlabeled_data):
+                inputs = Variable(image).to(engine.device)
+                targets = Variable(label).to(engine.device)
+                B, V, C, H, W = inputs.shape
+                inputs = inputs.view(-1, C, H, W)
+                outputs, features_k, features = engine.model(B, V, num_views, inputs)
+                true_labels = torch.max(targets, 1)[1]
+
+                openmax_scores = compute_openmax_scores(features.detach().cpu().numpy(), mavs, weibull_models,
+                                                        true_labels, 44)
+
+                for i in range(len(true_labels)):
+                    true_label = true_labels[i].item()
+                    path = train_path[i]
+                    current_score = openmax_scores[i]
+                    object_class = marks[
+                        i].item()  # Assuming `marks` can be used similarly to `object_class` in the first function
+
+                    if object_class not in score_dict[true_label]:
+                        score_dict[true_label][object_class] = []
+                    score_dict[true_label][object_class].append([current_score, path])
+
+        # # Sort the pairs in descending order of scores
+        # sorted_pairs = []
+        # for class_index in range(opt.nb_classes):
+        #     class_pairs = [pair for pair in score_index_pairs if pair[2] == class_index]
+        #     class_pairs.sort(key=lambda x: -x[0])
+        #     if class_pairs:
+        #         sorted_pairs.append(class_pairs[0])  # append only the pair with the highest score
+
+        old_index_train = train_dataset.selected_ind_train
+        old_index_not_train = train_dataset.unselected_ind_train
+
+        for class_index in range(len(score_dict)):
+            selected_path = score_dict[class_index]
+            for object_class, value_ in selected_path.items():
+                sorted_scores = sorted(value_, key=lambda x: x[0], reverse=True)
+                max_score = sorted_scores[0][0]
+                current_path = sorted_scores[0][1]
+
+                old_index_train[class_index][0][object_class].append((current_path, object_class))
+
+                for jdx in range(len(old_index_not_train[class_index][0][object_class])):
+                    x1 = current_path
+                    x2 = old_index_not_train[class_index][0][object_class][jdx][0]
+                    if x1 == x2:
+                        del old_index_not_train[class_index][0][object_class][jdx]
+                        break
+
+        return old_index_train, old_index_not_train
+
 
 def core_set(opt, engine, train_dataset, unlabeled_data, labeled_dataset):
     engine.model.eval()
-    min_distances = [None] * 44
-    already_selected = [[] for _ in range(44)]
-    features = [[] for _ in range(44)]
-    indices = [[] for _ in range(44)]
-    labels = [[] for _ in range(44)]
+    min_distances = [None] * opt.nb_classes
+    already_selected = [[] for _ in range(opt.nb_classes)]
+    features = [[] for _ in range(opt.nb_classes)]
+    indices = [[] for _ in range(opt.nb_classes)]
+    labels = [[] for _ in range(opt.nb_classes)]
 
     for index, (label, image, num_views, marks, train_path) in enumerate(unlabeled_data):
         inputs = Variable(image).to(engine.device)
         targets = Variable(label).to(engine.device)
         B, V, C, H, W = inputs.shape
         inputs = inputs.view(-1, C, H, W)
-        outputs, feature, utilization = engine.model(B, V, num_views, inputs)
+        outputs, features_k, feature = engine.model(B, V, num_views, inputs)
 
         transform_targets = torch.max(targets, 1)[1]
         for i in range(len(transform_targets)):
@@ -1426,7 +1579,7 @@ def core_set(opt, engine, train_dataset, unlabeled_data, labeled_dataset):
     old_index_train = train_dataset.selected_ind_train
     old_index_not_train = train_dataset.unselected_ind_train
 
-    for class_index in range(44):  # instead of opt.query_batch
+    for class_index in range(opt.nb_classes):  # instead of opt.query_batch
         feature_array = np.array([f[0] for f in features[class_index]])
         if not already_selected[class_index]:
             ind = np.random.choice(len(features[class_index]))
@@ -1448,6 +1601,67 @@ def core_set(opt, engine, train_dataset, unlabeled_data, labeled_dataset):
         old_index_train[label].append(selected_path)
         if selected_path in old_index_not_train[label]:
             old_index_not_train[label].remove(selected_path)
+
+    return old_index_train, old_index_not_train
+
+
+def core_set_object_wise(opt, engine, train_dataset, unlabeled_data, labeled_dataset):
+    engine.model.eval()
+    features = [{} for _ in range(opt.nb_classes)]
+    indices = [{} for _ in range(opt.nb_classes)]
+    already_selected = [{} for _ in range(opt.nb_classes)]
+    min_distances = [{} for _ in range(opt.nb_classes)]
+
+    for index, (label, image, num_views, marks, train_path) in enumerate(unlabeled_data):
+        inputs = Variable(image).to(engine.device)
+        targets = Variable(label).to(engine.device)
+        B, V, C, H, W = inputs.shape
+        inputs = inputs.view(-1, C, H, W)
+        outputs, features_k, feature = engine.model(B, V, num_views, inputs)
+
+        transform_targets = torch.max(targets, 1)[1]
+        for i in range(len(transform_targets)):
+            class_index = transform_targets[i].item()
+            object_class = marks[i].item()
+            if object_class not in features[class_index]:
+                features[class_index][object_class] = []
+                indices[class_index][object_class] = []
+                already_selected[class_index][object_class] = []
+                min_distances[class_index][object_class] = None
+            features[class_index][object_class].append(feature[i].detach().cpu().numpy())
+            indices[class_index][object_class].append(train_path[i])
+
+    old_index_train = train_dataset.selected_ind_train
+    old_index_not_train = train_dataset.unselected_ind_train
+
+    for class_index in range(opt.nb_classes):
+        for object_class in features[class_index].keys():
+            feature_array = np.array(features[class_index][object_class])
+            if not feature_array.size:  # Skip if no features
+                continue
+
+            # Find the index that maximizes the minimum distance to all previously selected features
+            if not already_selected[class_index][object_class]:
+                ind = np.random.choice(len(feature_array))
+            else:
+                distances = euclidean_distances(feature_array, feature_array)
+                min_distances[class_index][object_class] = np.min(
+                    distances[:, already_selected[class_index][object_class]], axis=1)
+                ind = np.argmax(min_distances[class_index][object_class])
+
+            # Store the selected index for future distance calculations
+            already_selected[class_index][object_class].append(ind)
+
+            selected_path = indices[class_index][object_class][ind]
+
+            old_index_train[class_index][0][object_class].append((selected_path, object_class))
+
+            for jdx in range(len(old_index_not_train[class_index][0][object_class])):
+                x1 = selected_path
+                x2 = old_index_not_train[class_index][0][object_class][jdx][0]
+                if x1 == x2:
+                    del old_index_not_train[class_index][0][object_class][jdx]
+                    break
 
     return old_index_train, old_index_not_train
 
@@ -1618,3 +1832,5 @@ def certainty_sampling(opt, engine, train_dataset, unlabeled_data, labeled_datas
                 old_index_not_train[class_index].remove(highest_certainty_path)
 
         return old_index_train, old_index_not_train
+
+

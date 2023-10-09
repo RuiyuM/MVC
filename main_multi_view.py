@@ -400,11 +400,12 @@ if __name__ == '__main__':
             )
 
         if opt.QUERIES_STRATEGY == 'random':
-            selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.random_sampling_object_wise(opt,
-                                                                                                               engine,
-                                                                                                               train_dataset,
-                                                                                                               unlabeled_data,
-                                                                                                               labeled_dataset)
+            selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.random_sampling_object_wise(
+                opt,
+                engine,
+                train_dataset,
+                unlabeled_data,
+                labeled_dataset)
 
         if opt.QUERIES_STRATEGY == 'LfOSA':
             selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.LfOSA(opt,
@@ -414,7 +415,7 @@ if __name__ == '__main__':
                                                                                                      labeled_dataset)
 
         if opt.QUERIES_STRATEGY == 'BGADL':
-            selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.bayesian_generative_active_learning(
+            selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.bayesian_generative_active_learning_object_wise(
                 opt,
                 engine,
                 train_dataset,
@@ -422,15 +423,15 @@ if __name__ == '__main__':
                 labeled_dataset)
 
         if opt.QUERIES_STRATEGY == 'OpenMax':
-            selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.open_max(opt,
-                                                                                                        engine,
-                                                                                                        train_data,
-                                                                                                        train_dataset,
-                                                                                                        unlabeled_data,
-                                                                                                        )
+            selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.open_max_object_wise(opt,
+                                                                                                                    engine,
+                                                                                                                    train_data,
+                                                                                                                    train_dataset,
+                                                                                                                    unlabeled_data,
+                                                                                                                    )
 
         if opt.QUERIES_STRATEGY == 'Core_set':
-            selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.core_set(
+            selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.core_set_object_wise(
                 opt,
                 engine,
                 train_dataset,
