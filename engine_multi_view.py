@@ -61,7 +61,7 @@ class MultiViewEngine(object):
             script = ('Epoch:[ %d | %d ]    Loss: %.4f    ') % (epoch + 1, epochs, total_loss)
             print(script)
 
-            evaluation
+            #evaluation
             if epoch == epochs - 1:
                 with torch.no_grad():
                     overall_accuracy = self.valid()
@@ -98,7 +98,7 @@ class MultiViewEngine(object):
             script = ('Epoch:[ %d | %d ]    Loss: %.4f    ') % (epoch + 1, epochs, total_loss)
             print(script)
 
-            evaluation
+            #evaluation
             if epoch == epochs - 1:
                 with torch.no_grad():
                     overall_accuracy = self.valid()
