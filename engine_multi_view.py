@@ -61,13 +61,13 @@ class MultiViewEngine(object):
             script = ('Epoch:[ %d | %d ]    Loss: %.4f    ') % (epoch + 1, epochs, total_loss)
             print(script)
 
-            # evaluation
-            # if epoch == epochs - 1:
-            #     with torch.no_grad():
-            #         overall_accuracy = self.valid()
-            #
-            #     # save best model
-            #     self.save_model_weights(epoch, overall_accuracy)
+            evaluation
+            if epoch == epochs - 1:
+                with torch.no_grad():
+                    overall_accuracy = self.valid()
+
+                # save best model
+                self.save_model_weights(epoch, overall_accuracy)
 
             # get remaining time
             current_time = time.time()
@@ -98,13 +98,13 @@ class MultiViewEngine(object):
             script = ('Epoch:[ %d | %d ]    Loss: %.4f    ') % (epoch + 1, epochs, total_loss)
             print(script)
 
-            #evaluation
-            # if epoch == epochs - 1:
-            #     with torch.no_grad():
-            #         overall_accuracy = self.valid()
-            #
-            #     # save best model
-            #     self.save_model_weights(epoch, overall_accuracy)
+            evaluation
+            if epoch == epochs - 1:
+                with torch.no_grad():
+                    overall_accuracy = self.valid()
+
+                # save best model
+                self.save_model_weights(epoch, overall_accuracy)
 
             # get remaining time
             current_time = time.time()
