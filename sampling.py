@@ -164,6 +164,8 @@ def patch_based_selection_DAN(opt, engine, train_dataset, unlabeled_data, labele
                     label_K_dict[true_label][object_class[i].item()] = []
                 # Add new_metric_list to dictionary
                 label_K_dict[true_label][object_class[i].item()].append(new_metric_list)
+            del inputs, targets, outputs, features
+            torch.cuda.empty_cache()
 
     with torch.no_grad():
         # training_K_selected_dict is a variable which store the K for the rest unselected objects' view
@@ -190,7 +192,8 @@ def patch_based_selection_DAN(opt, engine, train_dataset, unlabeled_data, labele
                     training_K_selected_dict[true_label][object_class[i].item()] = []
                 # Add new_metric_list and train_path to dictionary
                 training_K_selected_dict[true_label][object_class[i].item()].append([new_metric_list, path])
-
+            del inputs, targets, outputs, features
+            torch.cuda.empty_cache()
 
 
         selected_path = calculate_similarity_bipartite(label_K_dict, training_K_selected_dict)

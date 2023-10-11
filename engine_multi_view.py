@@ -11,7 +11,7 @@ import pickle
 import utils as tool
 import parser_test as parser_2
 class MultiViewEngine(object):
-    def __init__(self, model, train_data, valid_data, num_classes, optimizer, scheduler, criterion, weight_path, device, mv_type):
+    def __init__(self, model, train_data, valid_data, num_classes, optimizer, scheduler, criterion, weight_path, device, mv_type, number_of_training_set):
         super(MultiViewEngine, self).__init__()
         self.opt = parser_2.get_parser()
         self.model = model.to('cuda')
@@ -26,9 +26,10 @@ class MultiViewEngine(object):
         self.mv_type = mv_type
         self.best_accuracy = 0
         self.start_epoch = 0
+        self.number_of_training_set = number_of_training_set
 
     def save_model_weights(self, epoch, overall_accuracy):
-        best_weight = os.path.join(self.weight_path, self.mv_type + '.pt')
+        best_weight = os.path.join(self.weight_path, self.mv_type+'_'+ self.opt.DATA_SET +'_'+ self.opt.QUERIES_STRATEGY + '_'+ self.number_of_training_set + '.pt')
         if overall_accuracy >= self.best_accuracy:
             self.best_accuracy = overall_accuracy
             print('Save Weight!')
@@ -62,12 +63,12 @@ class MultiViewEngine(object):
             print(script)
 
             #evaluation
-            if epoch == epochs - 1:
-                with torch.no_grad():
-                    overall_accuracy = self.valid()
+            # if epoch == epochs - 1:
+            with torch.no_grad():
+                overall_accuracy = self.valid()
 
-                # save best model
-                self.save_model_weights(epoch, overall_accuracy)
+            # save best model
+            self.save_model_weights(epoch, overall_accuracy)
 
             # get remaining time
             current_time = time.time()
@@ -99,12 +100,12 @@ class MultiViewEngine(object):
             print(script)
 
             #evaluation
-            if epoch == epochs - 1:
-                with torch.no_grad():
-                    overall_accuracy = self.valid()
+            # if epoch == epochs - 1:
+            with torch.no_grad():
+                overall_accuracy = self.valid()
 
-                # save best model
-                self.save_model_weights(epoch, overall_accuracy)
+            # save best model
+            self.save_model_weights(epoch, overall_accuracy)
 
             # get remaining time
             current_time = time.time()

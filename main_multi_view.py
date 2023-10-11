@@ -5,6 +5,7 @@ import sys
 import torch
 import random
 import warnings
+import pickle
 import numpy as np
 import torch.optim as optim
 import torch.backends.cudnn as cudnn
@@ -206,6 +207,8 @@ if __name__ == '__main__':
     # engine = MultiViewEngine(model_stage2, train_data, valid_data, opt.NUM_CLASSES, optimizer, scheduler, criterion,
     #                          opt.MV_WEIGHT_PATH, device, opt.MV_TYPE)
 
+    selected_images_at_all_round = {}
+    selected_images_at_all_round[0] = train_dataset.selected_ind_train
     # run multi-view
     for query in tqdm(range(opt.MV_QUERIES)):
         # define model at every query so it will not become continue learning
@@ -245,7 +248,7 @@ if __name__ == '__main__':
             model_stage2.eval()
 
         engine = MultiViewEngine(model_stage2, train_data, valid_data, 40, optimizer, scheduler, criterion,
-                                 opt.MV_WEIGHT_PATH, device, opt.MV_TYPE)
+                                 opt.MV_WEIGHT_PATH, device, opt.MV_TYPE, str(len(train_dataset.data)))
         if opt.MV_FLAG == 'TRAIN':
             if opt.MV_TYPE in ['MVCNN_NEW', 'GVCNN', 'DAN', 'MVFN', 'SMVCNN', 'MVT']:
                 engine.train_base(opt.MV_EPOCHS)
@@ -447,7 +450,22 @@ if __name__ == '__main__':
                 train_dataset,
                 unlabeled_data,
                 labeled_dataset)
+        selected_images_at_all_round[query + 1] = selected_ind_train_after_sampling
 
+        #############################################################################
+        # finishing sampling start saving the model
+        #############################################################################
+        if query == opt.MV_QUERIES - 1:
+
+            if not os.path.exists('selected_images'):
+                os.makedirs('selected_images')
+
+            filename = f"{opt.QUERIES_STRATEGY}_{len(train_dataset.data)}_selected_images_paths.pkl"
+
+            with open(os.path.join('selected_images', filename), 'wb') as f:
+                pickle.dump(selected_images_at_all_round, f)
+
+        #############################################################################
 
 
         if opt.DATA_SET == 'M40v2':
