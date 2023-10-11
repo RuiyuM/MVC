@@ -70,42 +70,6 @@ class object_wise_dataset(data.Dataset):
                     self.data.append(
                         (label, image_paths, len(self.selected_ind_train[current_class]), current_object[-1][1]))
 
-        # if self.mode == 'sampling':
-        #     images = []
-        #     marks = torch.zeros(self.view_number)
-        #
-        #     for current_class in range(len(self.unselected_ind_train)):
-        #         label = torch.zeros(self.num_classes)
-        #         label[current_class] = 1.0
-        #         # label = torch.full((self.view_number,), current_class, dtype=torch.int)
-        #         number_of_image_tuple = int(len(self.unselected_ind_train[current_class][0]))
-        #         for idx in range(len(self.none_train_path[current_class])):
-        #
-        #             image = Image.open(
-        #                 self.unselected_ind_train[current_class][idx]).convert('RGB')
-        #             if self.transform:
-        #                 image = self.transform(image)
-        #             images.append(image)
-        #             self.data.append((label, torch.stack(images), int(self.view_number), marks))
-
-        # if self.mode == 'valid':
-        #
-        #     marks = torch.zeros(self.max_num_views)
-        #
-        #     for current_class in range(len(self.none_train_path)):
-        #         images = []
-        #         label = torch.zeros(self.num_classes)
-        #         label[current_class] = 1.0
-        #         # number_of_image_tuple = int(len(self.none_train_path[current_class]))
-        #         for idx in range(len(self.none_train_path[current_class])):
-        #             # for i in range(1, 1 + self.max_num_views):
-        #             # print(self.none_train_path[current_class][0][idx] + self.image_tmpl.format(i))
-        #             image = Image.open(self.none_train_path[current_class][idx]).convert(
-        #                 'RGB')
-        #             if self.transform:
-        #                 image = self.transform(image)
-        #             images.append(image)
-        #         self.data.append((label, torch.stack(images), self.max_num_views, marks))
 
     def filter_selected_unselected(self, file_path):
         selected_ind_train = [[] for _ in range(len(file_path))]
@@ -164,11 +128,11 @@ class object_wise_dataset(data.Dataset):
             # number of views been used at validation stage
             record = self.video_list[index]
             current_class = record.label
-            view_indices = list(range(1, 20 + 1))
+            view_indices = list(range(1, 2 + 1))
             images = []
             label = torch.zeros(self.num_classes)
             label[current_class] = 1.0
-            marks = torch.zeros(20)
+            marks = torch.zeros(2)
             for idx in view_indices:
 
                 image = Image.open(record.path + self.image_tmpl.format(idx)).convert('RGB')
@@ -176,27 +140,8 @@ class object_wise_dataset(data.Dataset):
                     image = self.transform(image)
                 images.append(image)
 
-            return label, torch.stack(images), 20, marks
+            return label, torch.stack(images), 2, marks
 
-    # def __getitem__(self, index):
-    #     record = self.video_list[index]
-    #     view_indices = np.linspace(1, self.total_view, self.view_number, dtype=int)
-    #     self.count += 1
-    #     print(self.count)
-    #     return self.get(record, view_indices, index)
-
-    # def __getitem__(self, index):
-    #     # Calculate which video record and which frame within that record
-    #     video_index = index // 20  # there are 20 images per record
-    #     frame_index = index % 20 + 1  # +1 because indices start from 1
-    #
-    #     record = self.video_list[video_index]
-    #     image, image_path = self._load_image(record.path, frame_index)
-    #     if self.transform:
-    #         image = self.transform(image)
-    #     self.count += 1
-    #     print(self.count)
-    #     return image, record.label, image_path
 
     def get(self, record, indices, index):
         images = list()

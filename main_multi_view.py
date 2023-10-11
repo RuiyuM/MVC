@@ -448,8 +448,7 @@ if __name__ == '__main__':
                 unlabeled_data,
                 labeled_dataset)
 
-        print(len(selected_ind_train_after_sampling[0]))
-        print(len(unselected_ind_train__after_sampling[0]))
+
 
         if opt.DATA_SET == 'M40v2':
             train_txt = 'v2_trainmodel40.txt'
