@@ -153,6 +153,7 @@ if __name__ == '__main__':
 
                                             max_num_views=views_number,
                                             view_number=opt.view_num,
+                                            num_validation=opt.num_validation_view,
                                             transform=transforms.Compose([transforms.RandomHorizontalFlip(),
                                                                           transforms.ToTensor(),
                                                                           transforms.Normalize(
@@ -164,6 +165,7 @@ if __name__ == '__main__':
                                             image_tmpl="_{:03d}." + img_ext,
 
                                             max_num_views=views_number,
+                                            num_validation=opt.num_validation_view,
                                             transform=torchvision.transforms.Compose([transforms.ToTensor(),
                                                                                       transforms.Normalize(
                                                                                           mean=[0.485, 0.456, 0.406],
@@ -209,6 +211,7 @@ if __name__ == '__main__':
 
     selected_images_at_all_round = {}
     selected_images_at_all_round[0] = train_dataset.selected_ind_train
+    best_accuracy = 0
     # run multi-view
     for query in tqdm(range(opt.MV_QUERIES)):
         # define model at every query so it will not become continue learning
@@ -248,7 +251,10 @@ if __name__ == '__main__':
             model_stage2.eval()
 
         engine = MultiViewEngine(model_stage2, train_data, valid_data, 40, optimizer, scheduler, criterion,
-                                 opt.MV_WEIGHT_PATH, device, opt.MV_TYPE, str(len(train_dataset.data)))
+                                 opt.MV_WEIGHT_PATH, device, opt.MV_TYPE, str(len(train_dataset.data)), best_accuracy, query)
+
+
+
         if opt.MV_FLAG == 'TRAIN':
             if opt.MV_TYPE in ['MVCNN_NEW', 'GVCNN', 'DAN', 'MVFN', 'SMVCNN', 'MVT']:
                 engine.train_base(opt.MV_EPOCHS)
@@ -282,6 +288,8 @@ if __name__ == '__main__':
             cprint('*' * 10 + ' Confusion Matrix ' + '*' * 10, 'yellow')
             confusion_matrix = engine.confusion_matrix(valid_data)
             tool.plot_confusion_matrix(confusion_matrix, opt.GROUPS, opt.MV_TYPE)
+
+        # best_accuracy = engine.best_accuracy
 
         cprint('*' * 25 + ' Finish Training start sampling ' + '*' * 25, 'yellow')
         # define the sampling dataset

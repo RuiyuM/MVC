@@ -898,6 +898,8 @@ def uncertainty_sampling_one_label_multi_Ob(opt, engine, train_dataset, unlabele
                 # class_index = transform_targets[i].item()
                 # entropy_dict[class_index]["entropy"].append(entropy[i].item())
                 # entropy_dict[class_index]["path"].append(train_path[i])
+            del inputs, targets, outputs, features_k, features, true_labels
+            torch.cuda.empty_cache()
 
 
         old_index_train = train_dataset.selected_ind_train

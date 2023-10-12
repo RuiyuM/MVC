@@ -11,7 +11,7 @@ import pickle
 import utils as tool
 import parser_test as parser_2
 class MultiViewEngine(object):
-    def __init__(self, model, train_data, valid_data, num_classes, optimizer, scheduler, criterion, weight_path, device, mv_type, number_of_training_set):
+    def __init__(self, model, train_data, valid_data, num_classes, optimizer, scheduler, criterion, weight_path, device, mv_type, number_of_training_set, best_accuracy, query):
         super(MultiViewEngine, self).__init__()
         self.opt = parser_2.get_parser()
         self.model = model.to('cuda')
@@ -27,9 +27,10 @@ class MultiViewEngine(object):
         self.best_accuracy = 0
         self.start_epoch = 0
         self.number_of_training_set = number_of_training_set
+        self.query = query
 
     def save_model_weights(self, epoch, overall_accuracy):
-        best_weight = os.path.join(self.weight_path, self.mv_type+'_'+ self.opt.DATA_SET +'_'+ self.opt.QUERIES_STRATEGY + '_'+ self.number_of_training_set + '.pt')
+        best_weight = os.path.join(self.weight_path, self.mv_type+'_' + 'query:' +str(self.query)+'_' + self.opt.DATA_SET +'_'+ self.opt.QUERIES_STRATEGY + '_'+ self.number_of_training_set + '.pt')
         if overall_accuracy >= self.best_accuracy:
             self.best_accuracy = overall_accuracy
             print('Save Weight!')

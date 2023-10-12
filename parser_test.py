@@ -18,6 +18,7 @@ def get_parser():
     parser.add_argument('-DATA_SET', type=str, default=cfg.DATA_SET)
     parser.add_argument('-nb_classes', type=str, default=cfg.nb_classes)
     parser.add_argument('-view_num', type=str, default=cfg.view_num)
+    parser.add_argument('-num_validation_view', type=str, default=cfg.num_validation_view)
 
 
 

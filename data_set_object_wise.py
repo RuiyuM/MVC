@@ -29,7 +29,7 @@ class VideoRecord(object):
 # 这个数据集是一个object作为一个class
 class object_wise_dataset(data.Dataset):
     def __init__(self, root_path, list_file, num_classes, mode,
-                 image_tmpl='_{:03}.jpg', max_num_views=12, view_number=1, transform=None,
+                 image_tmpl='_{:03}.jpg', max_num_views=12, view_number=1, num_validation=2, transform=None,
                  selected_ind_train=None, unselected_ind_train=None
                  ):
         self.classes = list(range(num_classes))
@@ -48,6 +48,7 @@ class object_wise_dataset(data.Dataset):
         self.none_train_path = [[] for _ in range(len(self.classes))]
         self.selected_ind_train = selected_ind_train
         self.unselected_ind_train = unselected_ind_train
+        self.num_validation = num_validation
 
         # if self.mode == 'train':
         for element in self.video_list:
@@ -128,11 +129,13 @@ class object_wise_dataset(data.Dataset):
             # number of views been used at validation stage
             record = self.video_list[index]
             current_class = record.label
-            view_indices = list(range(1, 2 + 1))
+            view_indices = list(range(1, 20 + 1))
+            random.shuffle(view_indices)
+            view_indices = view_indices[:int(self.num_validation)]
             images = []
             label = torch.zeros(self.num_classes)
             label[current_class] = 1.0
-            marks = torch.zeros(2)
+            marks = torch.zeros(int(self.num_validation))
             for idx in view_indices:
 
                 image = Image.open(record.path + self.image_tmpl.format(idx)).convert('RGB')
@@ -140,7 +143,7 @@ class object_wise_dataset(data.Dataset):
                     image = self.transform(image)
                 images.append(image)
 
-            return label, torch.stack(images), 2, marks
+            return label, torch.stack(images), int(self.num_validation), marks
 
 
     def get(self, record, indices, index):
