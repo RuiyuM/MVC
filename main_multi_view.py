@@ -166,6 +166,7 @@ if __name__ == '__main__':
 
                                             max_num_views=views_number,
                                             num_validation=opt.num_validation_view,
+                                            validation_mode=True,
                                             transform=torchvision.transforms.Compose([transforms.ToTensor(),
                                                                                       transforms.Normalize(
                                                                                           mean=[0.485, 0.456, 0.406],

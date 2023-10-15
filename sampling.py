@@ -539,7 +539,7 @@ def calculate_similarity_bipartite(label_metric_dicts, training_metric_label_dic
                 continue
 
             for training_metrics, path in training_metric_label_dicts[i][true_label]:
-                current_min_cost = float('inf')
+                current_min_cost = float('-inf')
 
                 for label_metrics in label_metrics_list:
                     # cost_distance = calculate_distance(label_metrics, training_metrics)
@@ -553,7 +553,7 @@ def calculate_similarity_bipartite(label_metric_dicts, training_metric_label_dic
                     row_ind, col_ind = linear_sum_assignment(cost_matrix_np)
                     total_cost = cost_matrix_np[row_ind, col_ind].sum()
 
-                    if total_cost < current_min_cost:
+                    if total_cost > current_min_cost:
                         current_min_cost = total_cost
 
                 current_path[true_label].append(path)
@@ -573,7 +573,7 @@ def calculate_similarity_bipartite(label_metric_dicts, training_metric_label_dic
         selected_path = selected_paths[idx]
         for jdx in range(len(selected_path[0])):
             paths = selected_path[0][jdx]
-            sorted_paths = sorted(paths, key=lambda x: x[0], reverse=True)
+            sorted_paths = sorted(paths, key=lambda x: x[0], reverse=False)
             selected_paths_for_class = sorted_paths[0]
             unselected_paths_for_class = sorted_paths[-1]
             score_.append(selected_paths_for_class[0])

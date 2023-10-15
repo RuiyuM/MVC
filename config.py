@@ -5,7 +5,7 @@ nb_classes = 40
 # drop_path = 0.1
 view_num = 1
 DATA_ROOT = "./data/"
-MAX_NUM_VIEWS = 1
+MAX_NUM_VIEWS = 10
 IMAGE_SIZE = 224
 DATA_INFO = {"CLASSES":['0000', '0001', '0002', '0003', '0004', '0005', '0006', '0007', '0008', '0009', '0010',
                         '0011', '0012', '0013', '0014', '0015', '0016', '0017', '0018', '0019', '0020', '0021',
@@ -15,7 +15,7 @@ DATA_INFO = {"CLASSES":['0000', '0001', '0002', '0003', '0004', '0005', '0006', 
                       ['0010', '0011', '0012', '0013', '0014'], ['0015', '0016'], ['0017', '0018'], ['0019', '0020'],
                       ['0021', '0022'], ['0023', '0024'], ['0025', '0026'], ['0027', '0028', '0029', '0030'], ['0031', '0032'],
                       ['0033', '0034'], ['0035', '0036'], ['0037', '0038'], ['0039', '0040'], ['0041', '0042', '0043']],
-             "NUM_CLASSES":40,
+             "NUM_CLASSES":44,
              "NUM_GROUPS":19}
 
 # Define seed
@@ -39,7 +39,7 @@ SV_WEIGHT_DECAY = 1e-3
 SV_LR_INIT = 1e-2
 
 num_validation_view = 2
-MV_EPOCHS = 50
+MV_EPOCHS = 40
 MV_QUERIES = 10
 QUERIES_STRATEGY = 'dissimilarity_sampling' # options: ['dissimilarity_sampling', 'uncertainty']
 
@@ -122,7 +122,7 @@ REPETITION = 500
 SV_WEIGHT_PATH = "./weight_sv/"
 SV_OUTPUT_PATH = "./output_sv/"
 SV_TEST_WEIGHT = "./weight_sv/CE.pt"
-MV_WEIGHT_PATH = "./weight_mv/"
+MV_WEIGHT_PATH = "./weight_mv_negative/"
 MV_TEST_WEIGHT = "./weight_mv/DAN.pt"
 
 # Define flag

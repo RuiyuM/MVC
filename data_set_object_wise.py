@@ -29,7 +29,7 @@ class VideoRecord(object):
 # 这个数据集是一个object作为一个class
 class object_wise_dataset(data.Dataset):
     def __init__(self, root_path, list_file, num_classes, mode,
-                 image_tmpl='_{:03}.jpg', max_num_views=12, view_number=1, num_validation=2, transform=None,
+                 image_tmpl='_{:03}.jpg', max_num_views=12, view_number=1, num_validation=2, validation_mode=False, transform=None,
                  selected_ind_train=None, unselected_ind_train=None
                  ):
         self.classes = list(range(num_classes))
@@ -49,6 +49,8 @@ class object_wise_dataset(data.Dataset):
         self.selected_ind_train = selected_ind_train
         self.unselected_ind_train = unselected_ind_train
         self.num_validation = num_validation
+        # validation mode is True means that we are validating each images in a single image style.
+        self.validation_mode = validation_mode
 
         # if self.mode == 'train':
         for element in self.video_list:
@@ -70,6 +72,20 @@ class object_wise_dataset(data.Dataset):
                     image_paths = [str(img_path[0]) for img_path in current_object]
                     self.data.append(
                         (label, image_paths, len(self.selected_ind_train[current_class]), current_object[-1][1]))
+        if self.mode == 'valid' and self.validation_mode == True:
+            for record in self.video_list:
+                current_class = record.label
+                view_indices = list(range(1, 20 + 1))
+                label = torch.zeros(self.num_classes)
+                label[current_class] = 1.0
+                marks = torch.zeros(int(1))
+                for idx in view_indices:
+                # (current_class + self.image_tmpl.format(selected_number)
+                    image_paths = record.path + self.image_tmpl.format(idx)
+
+
+                    self.data.append(
+                        (label, [image_paths], 1, marks))
 
 
     def filter_selected_unselected(self, file_path):
@@ -124,13 +140,13 @@ class object_wise_dataset(data.Dataset):
             return label, torch.stack(images), num_selected, obj_info
 
 
-        else:
+        elif self.mode == 'valid' and self.validation_mode == False:
             # change the following number (currently is 20) can change the
             # number of views been used at validation stage
             record = self.video_list[index]
             current_class = record.label
             view_indices = list(range(1, 20 + 1))
-            random.shuffle(view_indices)
+            # random.shuffle(view_indices)
             view_indices = view_indices[:int(self.num_validation)]
             images = []
             label = torch.zeros(self.num_classes)
@@ -145,6 +161,16 @@ class object_wise_dataset(data.Dataset):
 
             return label, torch.stack(images), int(self.num_validation), marks
 
+        elif self.mode == 'valid' and self.validation_mode == True:
+            label, image_paths, num_selected, obj_info = self.data[index]
+            images = []
+            for img_path in image_paths:
+                image = Image.open(img_path).convert('RGB')
+                if self.transform:
+                    image = self.transform(image)
+                images.append(image)
+            return label, torch.stack(images), num_selected, obj_info
+
 
     def get(self, record, indices, index):
         images = list()
@@ -158,5 +184,8 @@ class object_wise_dataset(data.Dataset):
     def __len__(self):
         if self.mode == 'train':
             return len(self.data)
-        if self.mode == 'valid':
+        elif self.mode == 'valid'and self.validation_mode == False:
             return len(self.video_list)
+        elif self.mode == 'valid' and self.validation_mode == True:
+            return len(self.data)
+
