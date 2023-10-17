@@ -569,7 +569,7 @@ def calculate_similarity_bipartite(label_metric_dicts, training_metric_label_dic
     print(f"Total execution time: {end_time - start_time} seconds")
     # new_list = []
 
-
+    # 在最相似的里面找出最不相似的那个
     for idx in range(len(selected_paths)):
         selected_path = selected_paths[idx]
         for jdx in range(len(selected_path[0])):
