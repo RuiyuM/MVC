@@ -64,7 +64,8 @@ class MultiViewEngine(object):
             print(script)
 
             #evaluation
-            if epoch % 5 == 0 and epoch !=0:
+            # if epoch % 5 == 0 and epoch !=0:
+            if epoch % 5 == 0:
                 with torch.no_grad():
                     overall_accuracy = self.valid()
 
