@@ -546,8 +546,11 @@ def calculate_similarity_bipartite(label_metric_dicts, training_metric_label_dic
                     # 196 * 768 @ 768 * 196 = 196 * 196
 
                     # training_metrics = training_metrics.t()
+                    label_metrics = F.normalize(label_metrics, dim=0)
+                    training_metrics = F.normalize(training_metrics, dim=0)
                     cost_matrix = torch.mm(label_metrics.t(), training_metrics) # 196*196
                     # cost_matrix = torch.mm(label_metrics, training_metrics.t())
+                    cost_matrix = -(cost_matrix + 1)
                     cost_matrix_np = cost_matrix.cpu().numpy()
 
                     row_ind, col_ind = linear_sum_assignment(cost_matrix_np)
@@ -555,8 +558,8 @@ def calculate_similarity_bipartite(label_metric_dicts, training_metric_label_dic
 
                     if total_cost < current_min_cost:
                         current_min_cost = total_cost
-
-                current_path[true_label].append(path)
+                current_path[true_label].append([current_min_cost, path])
+                # selected_paths[true_label].append(path)
 
         selected_paths[i].append(current_path)
 
@@ -565,20 +568,14 @@ def calculate_similarity_bipartite(label_metric_dicts, training_metric_label_dic
     print(f"End time: {end_time}")
     print(f"Total execution time: {end_time - start_time} seconds")
     # new_list = []
-    score_ = []
-    not_selected_list = []
-    not_selected_score = []
+
 
     for idx in range(len(selected_paths)):
         selected_path = selected_paths[idx]
         for jdx in range(len(selected_path[0])):
             paths = selected_path[0][jdx]
             sorted_paths = sorted(paths, key=lambda x: x[0], reverse=True)
-            selected_paths_for_class = sorted_paths[0]
-            unselected_paths_for_class = sorted_paths[-1]
-            score_.append(selected_paths_for_class[0])
-            not_selected_list.append(unselected_paths_for_class[1])
-            not_selected_score.append(unselected_paths_for_class[0])
+            selected_paths_for_class = sorted_paths[0][1]
             new_list[idx][0][jdx].append((selected_paths_for_class, jdx))
 
     return new_list

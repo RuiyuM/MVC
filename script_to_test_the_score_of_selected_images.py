@@ -28,6 +28,8 @@ sys.dont_write_bytecode = True
 warnings.filterwarnings('ignore')
 from unlabeled_Sampling_Dataset import Unlabeled_Dataset
 import utils as tool
+import matplotlib.pyplot as plt
+import torch.nn.functional as F
 import parser_test as parser_2
 from model.svcnn import SVCNN
 from model.mvcnn_new import MVCNNNew
@@ -52,13 +54,43 @@ from transforms import *
 # 'modelnet40v2png_ori4/airplane/test/airplane_0627'
 
 def calcualte_cost(label_metrics, training_metrics):
+    label_metrics = F.normalize(label_metrics, dim=0)
+    training_metrics = F.normalize(training_metrics, dim=0)
     cost_matrix = torch.mm(label_metrics.t(), training_metrics)  # 196*196
-    # cost_matrix = torch.mm(label_metrics, training_metrics.t())
+    cost_matrix = -(cost_matrix + 1)
     cost_matrix_np = cost_matrix.cpu().numpy()
 
     row_ind, col_ind = linear_sum_assignment(cost_matrix_np)
     total_cost = cost_matrix_np[row_ind, col_ind].sum()
     return total_cost
+
+
+def plot_costs(costs_dict):
+    """
+    Plots costs for different queries.
+
+    Parameters:
+    - costs_dict: A dictionary where keys are query IDs and values are lists of cost tuples.
+    """
+    for query_id, costs in enumerate(costs_dict):
+        indices = list(range(len(costs)))  # Creating indices based on the costs list length
+
+        # Unzipping the costs into separate lists
+        similar_images_scores, dissimilar_images_scores, self_scores = zip(*costs)
+
+        plt.figure(figsize=(10, 5))
+        plt.plot(indices, similar_images_scores, marker='o', linestyle='-', color='r', label='_similar_images_score')
+        plt.plot(indices, dissimilar_images_scores, marker='o', linestyle='-', color='g',
+                 label='dissimilar_images_score')
+        plt.plot(indices, self_scores, marker='o', linestyle='-', color='b', label='self_score')
+
+        plt.title(f'Query ID: {query_id}')
+        plt.xlabel('Index')
+        plt.ylabel('Cost')
+        plt.xticks(indices)
+        plt.legend()
+        plt.grid(True)
+        plt.show()
 
 class VideoRecord(object):
     def __init__(self, row):
@@ -80,7 +112,8 @@ class VideoRecord(object):
 if __name__ == '__main__':
     list_file = 'v2_testmodel40.txt'
     video_list = [VideoRecord(x.strip().split(' ')) for x in open(list_file)]
-
+    total_cost = [[], []]
+    video_list = video_list[:100]
     for video in video_list:
         image_paths = [f'{video.path}_001.png', f'{video.path}_002.png', f'{video.path}_012.png']
         category = video.path.split('/')[-3]
@@ -119,7 +152,7 @@ if __name__ == '__main__':
 
             # Ensure tome.patch.timm is defined or imported
             tome.patch.timm(model_stage2)
-            model_stage2.r = 0
+            model_stage2.r = 5
 
             model_stage2.load_state_dict(torch.load(file_path, map_location="cuda:0"))
 
@@ -140,9 +173,14 @@ if __name__ == '__main__':
             cost1 = calcualte_cost(label_K_dict[0], label_K_dict[1])
             cost2 = calcualte_cost(label_K_dict[0], label_K_dict[2])
             cost3 = calcualte_cost(label_K_dict[0], label_K_dict[0])
+            if model_idx == 3:
+                total_cost[0].append((cost1, cost2, cost3))
+            else:
+                total_cost[1].append((cost1, cost2, cost3))
             print(
                 f"Category: {category}, round{model_idx}_similar_images_score: {cost1}####dissimilar_images_score: {cost2}#######self_score: {cost3}")
 
+    plot_costs(total_cost)
 
 def apply_function_on_combinations(elements, func):
     """

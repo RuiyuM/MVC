@@ -122,7 +122,7 @@ REPETITION = 500
 SV_WEIGHT_PATH = "./weight_sv/"
 SV_OUTPUT_PATH = "./output_sv/"
 SV_TEST_WEIGHT = "./weight_sv/CE.pt"
-MV_WEIGHT_PATH = "./weight_mv_negative/"
+MV_WEIGHT_PATH = "./weight_mv/"
 MV_TEST_WEIGHT = "./weight_mv/DAN.pt"
 
 # Define flag
