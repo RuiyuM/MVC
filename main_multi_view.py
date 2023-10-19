@@ -182,21 +182,21 @@ if __name__ == '__main__':
                                 pin_memory=True, worker_init_fn=tool.seed_worker)
 
     if opt.DATA_SET == 'MVP_N':
-        train_dataset = MultiViewDataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'train', opt.MAX_NUM_VIEWS,
+        train_dataset = MultiViewDataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'test', opt.MAX_NUM_VIEWS,
                                          use_train=True)
         # dataloader = DataLoader(train_dataset, batch_size=32, shuffle=True)
         # batch = next(iter(dataloader))
         valid_dataset = MultiViewDataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'valid', opt.MAX_NUM_VIEWS,
                                          use_train=False)
 
-        test_dataset = MultiViewDataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'test', opt.MAX_NUM_VIEWS,
-                                        use_train=False)
+        # test_dataset = MultiViewDataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'test', opt.MAX_NUM_VIEWS,
+        #                                 use_train=False)
         train_data = DataLoader(train_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS, shuffle=True,
                                 pin_memory=True, worker_init_fn=tool.seed_worker)
         valid_data = DataLoader(valid_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS, shuffle=False,
                                 pin_memory=True, worker_init_fn=tool.seed_worker)
-        test_data = DataLoader(test_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS, shuffle=False,
-                               pin_memory=True, worker_init_fn=tool.seed_worker)
+        # test_data = DataLoader(test_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS, shuffle=False,
+        #                        pin_memory=True, worker_init_fn=tool.seed_worker)
     if opt.MV_FLAG in ['TRAIN', 'TEST']:
         print('Number of Training Sets:', len(train_dataset.data))
 
@@ -235,7 +235,7 @@ if __name__ == '__main__':
                 device)
         if opt.MV_TYPE == 'MVT':
             model_stage2 = create_model('vit_small_patch16_224', pretrained=True)
-            num_classes = 40  # Replace with your number of classes
+            num_classes = 44  # Replace with your number of classes
             model_stage2.head = torch.nn.Linear(model_stage2.head.in_features, num_classes)
             tome.patch.timm(model_stage2)
             model_stage2.r = 0
@@ -251,7 +251,7 @@ if __name__ == '__main__':
             model_stage2.load_state_dict(torch.load(opt.MV_TEST_WEIGHT, map_location=device))
             model_stage2.eval()
 
-        engine = MultiViewEngine(model_stage2, train_data, valid_data, 40, optimizer, scheduler, criterion,
+        engine = MultiViewEngine(model_stage2, train_data, valid_data, 44, optimizer, scheduler, criterion,
                                  opt.MV_WEIGHT_PATH, device, opt.MV_TYPE, str(len(train_dataset.data)), best_accuracy, query)
 
 
@@ -266,7 +266,7 @@ if __name__ == '__main__':
             cprint('*' * 10 + ' Valid Sets ' + '*' * 10, 'yellow')
             engine.test(valid_data, opt.TEST_T)
             cprint('*' * 10 + ' Test Sets ' + '*' * 10, 'yellow')
-            engine.test(test_data, opt.TEST_T)
+            # engine.test(test_data, opt.TEST_T)
         elif opt.MV_FLAG == 'COMPUTATION':
             cprint('*' * 10 + ' Computational Efficiency ' + '*' * 10, 'yellow')
             # define inputs
@@ -508,7 +508,7 @@ if __name__ == '__main__':
                                     pin_memory=True, worker_init_fn=tool.seed_worker)
 
         if opt.DATA_SET == 'MVP_N':
-            train_dataset = MultiViewDataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'train', opt.MAX_NUM_VIEWS,
+            train_dataset = MultiViewDataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'test', opt.MAX_NUM_VIEWS,
                                              use_train=True, selected_ind_train=selected_ind_train_after_sampling,
                                              unselected_ind_train=unselected_ind_train__after_sampling)
             train_data = DataLoader(train_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS, shuffle=True,

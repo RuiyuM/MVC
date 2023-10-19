@@ -26,7 +26,7 @@ class MultiViewDataset(Dataset):
 
         for class_name in self.classes:
             class_index = self.classes.index(class_name)
-            if self.mode == 'train':
+            if self.mode == 'test':
                 mode_path = os.path.join(self.data_root, mode, class_name)
                 for set_file in sorted(os.listdir(mode_path)):
                     files = sorted(glob.glob(os.path.join(mode_path, set_file, '*.png')))
@@ -50,12 +50,12 @@ class MultiViewDataset(Dataset):
                                                  transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
                                                 ])
 
-        if unselected_ind_train is None and selected_ind_train is None and self.mode == 'train':
+        if unselected_ind_train is None and selected_ind_train is None and self.mode == 'test':
             self.selected_ind_train, self.unselected_ind_train = self.filter_selected_unselected(self.file_path)
 
         self.data = []
         for index in range(self.__len__()):
-            if self.mode == 'train':
+            if self.mode == 'test':
                 path = self.selected_ind_train
                 split_setting = os.sep
             else:
@@ -72,7 +72,7 @@ class MultiViewDataset(Dataset):
             for i in range(0, len(path[index])):
                 image_name = (path[index][i].strip().split(os.sep)[-1]).strip().split('.')[0]
                 marks[i] = int(image_name.strip().split('_')[-1])
-                if self.mode == 'train':
+                if self.mode == 'test':
                     image = Image.open(path[index][i]).convert('RGB')
                 else:
                     image = Image.open(os.path.join(self.data_root, self.mode, path[index][i])).convert('RGB')
@@ -82,8 +82,9 @@ class MultiViewDataset(Dataset):
 
                 images.append(image)
 
-            for i in range(0, self.max_num_views - len(path[index])):
-                images.append(torch.zeros_like(images[0]))
+            if self.mode == 'valid':
+                for i in range(0, self.max_num_views - len(path[index])):
+                    images.append(torch.zeros_like(images[0]))
 
             self.data.append((label, torch.stack(images), len(path[index]), marks))
     def filter_selected_unselected(self, file_path):
@@ -104,7 +105,7 @@ class MultiViewDataset(Dataset):
 
 
     def __len__(self):
-        if self.mode == 'train':
+        if self.mode == 'test':
             return len(self.selected_ind_train)
         else:
             return len(self.none_train_path)

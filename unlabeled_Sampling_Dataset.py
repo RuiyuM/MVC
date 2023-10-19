@@ -70,11 +70,11 @@ class Unlabeled_Dataset(Dataset):
 
                 images.append(image)
 
-            if self.mode == "labeled" or self.mode == "unlabeled":
-                for i in range(0, self.max_num_views - end_point_setting):
-                    images.append(torch.zeros_like(images[0]))
+            # if self.mode == "labeled" or self.mode == "unlabeled":
+            #     for i in range(0, self.max_num_views - end_point_setting):
+            #         images.append(torch.zeros_like(images[0]))
 
-            if self.mode == "patched labeled":
+            if self.mode == "labeled":
                 self.data.append((label, torch.stack(images), len(path[index]), marks))
             else:
                 self.data.append((label, torch.stack(images), len(path[index]), marks, train_path))

@@ -37,84 +37,63 @@ from main_multi_view import generate_sampling_dataset
 
 
 
-def patch_based_selection(opt, engine, train_dataset, unlabeled_data, labeled_dataset, train_data,
-                          unlabeled_sampling_labeled_data,
-                          unlabeled_sampling_unlabeled_data):
-    model_name = "vit_base_patch16_224"
+def patch_based_selection_DAN(opt, engine, train_dataset, unlabeled_data, labeled_data, train_data,
 
-    # Load a pretrained model
-    model = timm.create_model(model_name, pretrained=True)
-    #
-    tome.patch.timm(model)
-    model = model.to('cuda')
-    transform = transforms.Compose([
-        transforms.Resize(int((256 / 224) * opt.IMAGE_SIZE), interpolation=InterpolationMode.BICUBIC),
-        transforms.CenterCrop(opt.IMAGE_SIZE),
-        transforms.ToTensor(),
-        transforms.Normalize(model.default_cfg["mean"], model.default_cfg["std"]),
-    ])
-    # # Run the model with no reduction (should be the same as before)
-    model.r = 0
-
-    unlabeled_dataset = Unlabeled_Dataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'patched unlabeled',
-                                          opt.MAX_NUM_VIEWS, unlabeled_sampling_labeled_data,
-                                          unlabeled_sampling_unlabeled_data, transform)
-    unlabeled_data = DataLoader(unlabeled_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS,
-                                shuffle=True,
-                                pin_memory=True, worker_init_fn=tool.seed_worker)
-
-    labeled_dataset = Unlabeled_Dataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'patched labeled',
-                                        opt.MAX_NUM_VIEWS, unlabeled_sampling_labeled_data,
-                                        unlabeled_sampling_unlabeled_data, transform)
-    labeled_data = DataLoader(labeled_dataset, batch_size=opt.TEST_MV_BS, num_workers=opt.NUM_WORKERS,
-                              shuffle=False,
-                              pin_memory=True, worker_init_fn=tool.seed_worker)
-    # batch = next(iter(labeled_data))
+                          ):
     engine.model.eval()
+    # the label_K_dict is a variable that store the K value for selected object's view
+    label_metric_dict = {}
     with torch.no_grad():
-        # opt.NUM_CLASSES
-        label_metric_dict = {}
 
-        for index, (label, image, num_views, marks) in enumerate(labeled_data):
-            image = image.squeeze(1)
+        for index, (label, image, num_views, object_class) in enumerate(labeled_data):
             inputs = Variable(image).to(engine.device)
-            # model(inputs)
-            model(inputs)
             targets = Variable(label).to(engine.device)
             true_labels = torch.max(targets, 1)[1]
-            metrics = model._tome_info["metric"]
-            # print(len(metrics))
+            B, V, C, H, W = inputs.shape
+            inputs = inputs.view(-1, C, H, W)
+            # outputs is prediction, metrics is K, features is features before linear layer
+            outputs, k_metrics, features = engine.model(B, V, num_views, inputs)
+
+
             for i in range(true_labels.size(0)):
                 true_label = true_labels[i].item()  # Convert tensor to Python scalar
-                # For each list in metrics, take the i-th element and add to a new list
-                new_metric_list = [m_list[i][1:, :] for m_list in metrics]
-                # Check if the label exists in the dictionary
+
+                new_metric_list = k_metrics[i]
                 if true_label not in label_metric_dict:
                     label_metric_dict[true_label] = []
-                # Add new_metric_list to dictionary
+                    # Add new_metric_list to dictionary
                 label_metric_dict[true_label].append(new_metric_list)
+            del inputs, targets, outputs, features
+            torch.cuda.empty_cache()
 
+    with torch.no_grad():
+        # training_K_selected_dict is a variable which store the K for the rest unselected objects' view
         training_metric_label_dict = {}
 
-        for index, (label, image, num_views, marks, train_path) in enumerate(unlabeled_data):
-            image = image.squeeze(1)
+        # First pass: collect features and paths
+        for index, (label, image, num_views, object_class, train_path) in enumerate(unlabeled_data):
             inputs = Variable(image).to(engine.device)
-            model(inputs)
             targets = Variable(label).to(engine.device)
+            B, V, C, H, W = inputs.shape
+            inputs = inputs.view(-1, C, H, W)
+            # outputs is prediction, metrics is K, features is features before linear layer
+            outputs, k_metrics, features = engine.model(B, V, num_views, inputs)
             true_labels = torch.max(targets, 1)[1]  # This is now a tensor of labels for the batch
 
-            metrics = model._tome_info["metric"]  # This should be a tensor of metrics for the batch
 
             # Loop over the batch
             for i in range(true_labels.size(0)):
                 true_label = true_labels[i].item()  # Convert tensor to Python scalar
                 # For each list in metrics, take the i-th element and add to a new list
-                new_metric_list = [m_list[i][1:, :] for m_list in metrics]
+                new_metric_list = k_metrics[i]
                 path = train_path[i]  # Get the train path for this image
                 if true_label not in training_metric_label_dict:
                     training_metric_label_dict[true_label] = []
                 # Add new_metric_list and train_path to dictionary
                 training_metric_label_dict[true_label].append([new_metric_list, path])
+            del inputs, targets, outputs, features
+            torch.cuda.empty_cache()
+
 
         selected_path = calculate_similarity_bipartite(label_metric_dict, training_metric_label_dict)
 
@@ -138,7 +117,53 @@ def patch_based_selection(opt, engine, train_dataset, unlabeled_data, labeled_da
     return old_index_train, old_index_not_train
 
 
-def patch_based_selection_DAN(opt, engine, train_dataset, unlabeled_data, labeled_data, train_data,
+def calculate_similarity_bipartite(label_metric_dict, training_metric_label_dict):
+    selected_paths = [[] for _ in range(len(label_metric_dict))]
+
+    for true_label, label_metrics_list in label_metric_dict.items():
+        if true_label not in training_metric_label_dict:
+            continue
+
+        for training_metrics, path in training_metric_label_dict[true_label]:
+            current_min_cost = float('inf')
+
+            # Loop over each set of metrics for this class in the labeled data
+            for label_metrics in label_metrics_list:
+                label_metrics = F.normalize(label_metrics, dim=0)
+                training_metrics = F.normalize(training_metrics, dim=0)
+                cost_matrix = torch.mm(label_metrics.t(), training_metrics)  # 196*196
+                # cost_matrix = torch.mm(label_metrics, training_metrics.t())
+                cost_matrix = -(cost_matrix + 1)
+                cost_matrix_np = cost_matrix.cpu().numpy()
+
+                row_ind, col_ind = linear_sum_assignment(cost_matrix_np)
+                total_cost = cost_matrix_np[row_ind, col_ind].sum()
+
+                if total_cost < current_min_cost:
+                    current_min_cost = total_cost
+
+            # Append the minimum cost and associated path for this unlabeled sample
+            selected_paths[true_label].append([current_min_cost, path])
+
+    new_list = []
+
+    # Loop through the list of classes
+    for paths in selected_paths:
+        # Sort the list in descending order (highest first)
+        sorted_paths = sorted(paths, key=lambda x: x[0], reverse=True)
+
+        # Select the top 10 biggest and store their paths
+        selected_paths_for_class = sorted_paths[0]
+
+        # Extract the paths only
+        selected_paths_for_class = selected_paths_for_class[1]
+
+        new_list.append([selected_paths_for_class])
+
+    # print(new_list)
+    return new_list
+
+def patch_based_selection_DAN_object_wise(opt, engine, train_dataset, unlabeled_data, labeled_data, train_data,
 
                           ):
     engine.model.eval()
@@ -196,7 +221,7 @@ def patch_based_selection_DAN(opt, engine, train_dataset, unlabeled_data, labele
             torch.cuda.empty_cache()
 
 
-        selected_path = calculate_similarity_bipartite(label_K_dict, training_K_selected_dict)
+        selected_path = calculate_similarity_bipartite_object_wise(label_K_dict, training_K_selected_dict)
 
         old_index_train = train_dataset.selected_ind_train
         old_index_not_train = train_dataset.unselected_ind_train
@@ -522,7 +547,7 @@ def calculate_distance(x, y):
 #     print(not_selected_score)
 #     return new_list
 
-def calculate_similarity_bipartite(label_metric_dicts, training_metric_label_dicts):
+def calculate_similarity_bipartite_object_wise(label_metric_dicts, training_metric_label_dicts):
     # so the structures for label_metric_dicts and training_metric_label_dicts are
     # class -> object_class -> K; so we need to loop through them to extract the K values and perform
     # the calculation.
