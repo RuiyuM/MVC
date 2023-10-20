@@ -152,15 +152,20 @@ def calculate_similarity_bipartite(label_metric_dict, training_metric_label_dict
         # Sort the list in descending order (highest first)
         sorted_paths = sorted(paths, key=lambda x: x[0], reverse=True)
 
-        # Select the top 10 biggest and store their paths
-        selected_paths_for_class = sorted_paths[0]
+        # Select the top 5 biggest and store their paths
+        top_5_paths_for_class = sorted_paths[:2]  # Get the first five items from the sorted list
 
-        # Extract the paths only
-        selected_paths_for_class = selected_paths_for_class[1]
+        # Create a new list to store the paths of the top 5 biggest
+        paths_list = []
+        for item in top_5_paths_for_class:
+            # Extract the paths only
+            path = item[1]
+            paths_list.append(path)
 
-        new_list.append([selected_paths_for_class])
+        # Append the paths to the new_list
+        new_list.append(paths_list)
 
-    # print(new_list)
+
     return new_list
 
 def patch_based_selection_DAN_object_wise(opt, engine, train_dataset, unlabeled_data, labeled_data, train_data,
@@ -858,7 +863,7 @@ def uncertainty_sampling(opt, engine, train_dataset, unlabeled_data, labeled_dat
             targets = Variable(label).to(engine.device)
             B, V, C, H, W = inputs.shape
             inputs = inputs.view(-1, C, H, W)
-            outputs, features = engine.model(B, V, num_views, inputs)
+            outputs, k_metrics, features = engine.model(B, V, num_views, inputs)
 
             softmax_outputs = torch.nn.functional.softmax(outputs, dim=1)  # Calculate softmax for entropy computation
             entropy = -torch.sum(softmax_outputs * torch.log2(softmax_outputs + 1e-6),
@@ -886,7 +891,7 @@ def uncertainty_sampling(opt, engine, train_dataset, unlabeled_data, labeled_dat
             # Remove the highest_entropy_path from the sublist in old_index_not_train at class_index
             if highest_entropy_path in old_index_not_train[class_index]:
                 old_index_not_train[class_index].remove(highest_entropy_path)
-        print(old_index_train)
+        # print(old_index_train)
         return old_index_train, old_index_not_train
 
 def uncertainty_sampling_one_label_multi_Ob(opt, engine, train_dataset, unlabeled_data, labeled_dataset):
@@ -1153,17 +1158,18 @@ def random_sampling(opt, engine, train_dataset, unlabeled_data, labeled_dataset)
         old_index_not_train = train_dataset.unselected_ind_train
 
         for class_index in range(44):
-            if path_dict[class_index]:  # Check if there are available paths for the class
-                selected_path = random.choice(path_dict[class_index])  # Get random path
+            for idx in range(2):
+                if path_dict[class_index]:  # Check if there are available paths for the class
+                    selected_path = random.choice(path_dict[class_index])  # Get random path
 
-                # Append the selected_path to the corresponding sublist in old_index_train
-                old_index_train[class_index].append(selected_path)
+                    # Append the selected_path to the corresponding sublist in old_index_train
+                    old_index_train[class_index].append(selected_path)
 
-                # Remove the selected_path from the sublist in old_index_not_train at class_index
-                if selected_path in old_index_not_train[class_index]:
-                    old_index_not_train[class_index].remove(selected_path)
-        print(old_index_train)
-
+                    # Remove the selected_path from the sublist in old_index_not_train at class_index
+                    if selected_path in old_index_not_train[class_index]:
+                        old_index_not_train[class_index].remove(selected_path)
+        # print(old_index_train)
+        # print(len(old_index_train[0]))
         return old_index_train, old_index_not_train
 
 def random_sampling_object_wise(opt, engine, train_dataset, unlabeled_data, labeled_dataset):

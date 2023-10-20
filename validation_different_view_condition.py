@@ -86,7 +86,7 @@ if __name__ == '__main__':
                                                 image_tmpl="_{:03d}." + img_ext,
                                                 max_num_views=views_number,
                                                 num_validation=opt.num_validation_view,
-                                                validation_mode=True,
+                                                validation_mode=False,
                                                 transform=torchvision.transforms.Compose([
                                                     transforms.ToTensor(),
                                                     transforms.Normalize(mean=[0.485, 0.456, 0.406],

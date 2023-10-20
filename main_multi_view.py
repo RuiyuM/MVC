@@ -365,7 +365,7 @@ if __name__ == '__main__':
 
         print(opt.QUERIES_STRATEGY)
         if opt.QUERIES_STRATEGY == 'uncertainty':
-            selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.uncertainty_sampling_one_label_multi_Ob(opt,
+            selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.uncertainty_sampling(opt,
                                                                                                                     engine,
                                                                                                                     train_dataset,
                                                                                                                     unlabeled_data,
@@ -405,7 +405,7 @@ if __name__ == '__main__':
             )
 
         if opt.QUERIES_STRATEGY == 'random':
-            selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.random_sampling_object_wise(
+            selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.random_sampling(
                 opt,
                 engine,
                 train_dataset,

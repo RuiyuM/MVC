@@ -71,7 +71,7 @@ class MultiViewDataset(Dataset):
 
             for i in range(0, len(path[index])):
                 image_name = (path[index][i].strip().split(os.sep)[-1]).strip().split('.')[0]
-                marks[i] = int(image_name.strip().split('_')[-1])
+                # marks[i] = int(image_name.strip().split('_')[-1])
                 if self.mode == 'test':
                     image = Image.open(path[index][i]).convert('RGB')
                 else:

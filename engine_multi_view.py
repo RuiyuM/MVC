@@ -69,7 +69,7 @@ class MultiViewEngine(object):
                     overall_accuracy = self.valid()
 
                 # save best model
-                # self.save_model_weights(epoch, overall_accuracy)
+                self.save_model_weights(epoch, overall_accuracy)
 
             # get remaining time
             current_time = time.time()
