@@ -18,4 +18,6 @@ Step 3: Unzip data.zip
 unzip data.zip
 ```
 # feature aggregation QUERIES_STRATEGY = ['dissimilarity_sampling', 'uncertainty', 'random', 'patch_based_selection']
-python3 main_multi_view.py -MV_FLAG=TRAIN -MV_TYPE=MVT -QUERIES_STRATEGY=patch_based_selection -DATA_SET=M40v2
+CUDA_VISIBLE_DEVICES=3 nohup python main_multi_view.py -MV_FLAG=TRAIN -MV_TYPE=MVT -QUERIES_STRATEGY=patch_based_selection -DATA_SET=MVP_N > patch_2_MVP_N_160_validation.log &
+CUDA_VISIBLE_DEVICES=3 nohup python main_multi_view.py -MV_FLAG=TRAIN -MV_TYPE=MVT -QUERIES_STRATEGY=reverse_patch_based_selection -DATA_SET=MVP_N > reverse_2_MVP_N_160_validation.log &
+CUDA_VISIBLE_DEVICES=3 nohup python main_multi_view.py -MV_FLAG=TRAIN -MV_TYPE=MVT -QUERIES_STRATEGY=random -DATA_SET=MVP_N > random_2_MVP_N_160_validation.log &

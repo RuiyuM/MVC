@@ -87,6 +87,7 @@ class MultiViewDataset(Dataset):
                     images.append(torch.zeros_like(images[0]))
 
             self.data.append((label, torch.stack(images), len(path[index]), marks))
+
     def filter_selected_unselected(self, file_path):
         selected_ind_train = [[] for _ in range(len(file_path))]
         unselected_ind_train = [[] for _ in range(len(file_path))]
@@ -95,11 +96,21 @@ class MultiViewDataset(Dataset):
             # Shuffle the list in-place
             random.shuffle(class_files)
 
-            # Select one element for labeled_ind_train
-            selected_ind_train[i].append(class_files[0])
+            # Counter to keep track of selected files
+            selected_count = 0
 
-            # The rest go to unlabeled_ind_train
-            unselected_ind_train[i].extend(class_files[1:])
+            for file in class_files:
+                # Get the file name without the directory
+                file_name = os.path.basename(file)
+
+                # Check if the file name ends with '0.png' and if less than 5 files have been selected
+                if file_name.endswith('0.png') and selected_count < 5:
+                    # Add the file to selected_ind_train and increment the counter
+                    selected_ind_train[i].append(file)
+                    selected_count += 1
+                else:
+                    # Add the rest of the files to unselected_ind_train
+                    unselected_ind_train[i].append(file)
 
         return selected_ind_train, unselected_ind_train
 

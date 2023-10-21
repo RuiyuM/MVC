@@ -391,6 +391,16 @@ if __name__ == '__main__':
                 train_data,
             )
 
+        if opt.QUERIES_STRATEGY == 'reverse_patch_based_selection':
+            selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.reverse_patch_based_selection_DAN(
+                opt,
+                engine,
+                train_dataset,
+                unlabeled_data,
+                labeled_data,
+                train_data,
+            )
+
         if opt.QUERIES_STRATEGY == 'course_to_fine':
             selected_ind_train_after_sampling, unselected_ind_train__after_sampling = sampling.coursetofine(
                 opt,
