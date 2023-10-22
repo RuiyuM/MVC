@@ -41,13 +41,13 @@ SV_LR_INIT = 1e-2
 Query_batch = 2
 Optimizer_selection = "SGD"
 num_validation_view = 2
-MV_EPOCHS = 60
-MV_QUERIES = 10
+MV_EPOCHS = 50
+MV_QUERIES = 20
 QUERIES_STRATEGY = 'dissimilarity_sampling' # options: ['dissimilarity_sampling', 'uncertainty']
 
 MV_WARMUP_EPOCHS = 1
-TRAIN_MV_BS = 8
-TEST_MV_BS = 8
+TRAIN_MV_BS = 1
+TEST_MV_BS = 1
 MV_MOMENTUM = 0.9
 MV_WEIGHT_DECAY = 1e-3
 MV_LR_INIT = 1e-3

@@ -33,6 +33,14 @@ class MultiViewDataset(Dataset):
                     for elements_ in files:
 
                         self.file_path[class_index].append(elements_)
+                # adding the training data set
+                mode_path = os.path.join(self.data_root, "train", class_name)
+                for set_file in sorted(os.listdir(mode_path)):
+                    files = sorted(glob.glob(os.path.join(mode_path, set_file, '*.png')))
+                    for elements_ in files:
+                        self.file_path[class_index].append(elements_)
+
+
             else:
                 class_list = self.data_root + mode + '_list/' + mode + '_' + class_name + '_100.pkl'
                 open_file = open(class_list, 'rb')
