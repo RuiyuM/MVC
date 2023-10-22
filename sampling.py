@@ -279,7 +279,7 @@ def reverse_calculate_similarity_bipartite(label_metric_dict, training_metric_la
     # Loop through the list of classes
     for paths in selected_paths:
         # Sort the list in descending order (highest first)
-        sorted_paths = sorted(paths, key=lambda x: x[0], reverse=True)
+        sorted_paths = sorted(paths, key=lambda x: x[0], reverse=False)
 
         # Select the top 5 biggest and store their paths
         top_5_paths_for_class = sorted_paths[:int(opt.Query_batch)]  # Get the first five items from the sorted list
