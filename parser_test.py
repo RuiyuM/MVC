@@ -19,6 +19,8 @@ def get_parser():
     parser.add_argument('-nb_classes', type=str, default=cfg.nb_classes)
     parser.add_argument('-view_num', type=str, default=cfg.view_num)
     parser.add_argument('-num_validation_view', type=str, default=cfg.num_validation_view)
+    parser.add_argument('-Query_batch', type=str, default=cfg.Query_batch)
+    parser.add_argument('-Optimizer_selection', type=str, default=cfg.Optimizer_selection)
 
 
 

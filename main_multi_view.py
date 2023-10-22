@@ -186,6 +186,7 @@ if __name__ == '__main__':
                                          use_train=True)
         # dataloader = DataLoader(train_dataset, batch_size=32, shuffle=True)
         # batch = next(iter(dataloader))
+        print(f'number of view in each model: {len(train_dataset.data[0][1])} #### number of total training images: {opt.NUM_CLASSES * len(train_dataset.data[0][1])}')
         valid_dataset = MultiViewDataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'valid', opt.MAX_NUM_VIEWS,
                                          use_train=False)
 
@@ -198,7 +199,7 @@ if __name__ == '__main__':
         # test_data = DataLoader(test_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS, shuffle=False,
         #                        pin_memory=True, worker_init_fn=tool.seed_worker)
     if opt.MV_FLAG in ['TRAIN', 'TEST']:
-        print('Number of Training Sets:', len(train_dataset.data))
+        print('Number of Training class:', len(train_dataset.data))
 
 
     # set path
@@ -235,14 +236,16 @@ if __name__ == '__main__':
                 device)
         if opt.MV_TYPE == 'MVT':
             model_stage2 = create_model('vit_small_patch16_224', pretrained=True)
-            num_classes = 44  # Replace with your number of classes
+            num_classes = opt.NUM_CLASSES  # Replace with your number of classes
             model_stage2.head = torch.nn.Linear(model_stage2.head.in_features, num_classes)
             tome.patch.timm(model_stage2)
             model_stage2.r = 0
         # define optimizer
-        optimizer = optim.SGD(model_stage2.parameters(), lr=opt.MV_LR_INIT, weight_decay=opt.MV_WEIGHT_DECAY,
-                                  momentum=opt.MV_MOMENTUM)
-        # optimizer = AdamW(model_stage2.parameters(), lr=opt.MV_LR_INIT, weight_decay=opt.MV_WEIGHT_DECAY)
+        if opt.Optimizer_selection == "SGD":
+            optimizer = optim.SGD(model_stage2.parameters(), lr=opt.MV_LR_INIT, weight_decay=opt.MV_WEIGHT_DECAY,
+                                    momentum=opt.MV_MOMENTUM)
+        else:
+            optimizer = optim.AdamW(model_stage2.parameters(), lr=opt.MV_LR_INIT, weight_decay=opt.MV_WEIGHT_DECAY)
 
         scheduler = tool.CosineDecayLR(optimizer, T_max=opt.MV_EPOCHS * len(train_dataset), lr_init=opt.MV_LR_INIT,
                                            lr_min=opt.MV_LR_END, warmup=opt.MV_WARMUP_EPOCHS * len(train_dataset))
@@ -523,3 +526,5 @@ if __name__ == '__main__':
                                              unselected_ind_train=unselected_ind_train__after_sampling)
             train_data = DataLoader(train_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS, shuffle=True,
                                     pin_memory=True, worker_init_fn=tool.seed_worker)
+            print(
+                f'number of view in each model: {len(train_dataset.data[0][1])}#### number of total training images: {opt.NUM_CLASSES * len(train_dataset.data[0][1])}')

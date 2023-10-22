@@ -38,6 +38,8 @@ SV_MOMENTUM = 0.9
 SV_WEIGHT_DECAY = 1e-3
 SV_LR_INIT = 1e-2
 
+Query_batch = 2
+Optimizer_selection = "SGD"
 num_validation_view = 2
 MV_EPOCHS = 60
 MV_QUERIES = 10

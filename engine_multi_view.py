@@ -41,6 +41,8 @@ class MultiViewEngine(object):
         previous_time = time.time()
         for epoch in range(self.start_epoch, epochs):
             total_loss = 0
+            all_correct_points = 0
+            all_points = 0
             for index, (label, image, num_views, marks) in enumerate(self.train_data):
                 self.scheduler.step(len(self.train_data)*epoch + index)
                 inputs = Variable(image).to(self.device)
@@ -51,17 +53,25 @@ class MultiViewEngine(object):
                 inputs = inputs.view(-1, C, H, W)
                 # inputs = inputs.view(B, -1, H, W)
                 outputs, features_k, features = self.model(B, V, num_views, inputs)
-                # outputs = self.model(inputs)
+                prediction = torch.max(outputs, 1)[1]
+                transform_targets = torch.max(targets, 1)[1]
+                results = (prediction == transform_targets)
+                correct_points = torch.sum(results.long())
+                all_correct_points += correct_points
+                all_points += results.size()[0]
                 loss = self.criterion(outputs, targets)
                 total_loss += loss.item()
                 loss.backward()
                 self.optimizer.step()
                 # Delete variables and clear GPU cache
-                del inputs, targets, outputs, features_k, features, loss
+                del inputs, targets, outputs, features_k, features, loss, prediction, transform_targets, results, correct_points
                 torch.cuda.empty_cache()
 
             script = ('Epoch:[ %d | %d ]    Loss: %.4f    ') % (epoch + 1, epochs, total_loss)
             print(script)
+
+            overall_accuracy = (all_correct_points.float() / all_points).cpu().data.numpy()
+            print('training ACC:', '%.2f' % (100 * overall_accuracy))
 
             #evaluation
             if epoch == epochs - 1:

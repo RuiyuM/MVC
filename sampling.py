@@ -95,7 +95,7 @@ def patch_based_selection_DAN(opt, engine, train_dataset, unlabeled_data, labele
             torch.cuda.empty_cache()
 
 
-        selected_path = calculate_similarity_bipartite(label_metric_dict, training_metric_label_dict)
+        selected_path = calculate_similarity_bipartite(label_metric_dict, training_metric_label_dict, opt)
 
         old_index_train = train_dataset.selected_ind_train
         old_index_not_train = train_dataset.unselected_ind_train
@@ -174,7 +174,7 @@ def reverse_patch_based_selection_DAN(opt, engine, train_dataset, unlabeled_data
             torch.cuda.empty_cache()
 
 
-        selected_path = reverse_calculate_similarity_bipartite(label_metric_dict, training_metric_label_dict)
+        selected_path = reverse_calculate_similarity_bipartite(label_metric_dict, training_metric_label_dict, opt)
 
         old_index_train = train_dataset.selected_ind_train
         old_index_not_train = train_dataset.unselected_ind_train
@@ -195,7 +195,7 @@ def reverse_patch_based_selection_DAN(opt, engine, train_dataset, unlabeled_data
 
     return old_index_train, old_index_not_train
 
-def calculate_similarity_bipartite(label_metric_dict, training_metric_label_dict):
+def calculate_similarity_bipartite(label_metric_dict, training_metric_label_dict, opt):
     selected_paths = [[] for _ in range(len(label_metric_dict))]
 
     for true_label, label_metrics_list in label_metric_dict.items():
@@ -231,7 +231,7 @@ def calculate_similarity_bipartite(label_metric_dict, training_metric_label_dict
         sorted_paths = sorted(paths, key=lambda x: x[0], reverse=True)
 
         # Select the top 5 biggest and store their paths
-        top_5_paths_for_class = sorted_paths[:2]  # Get the first five items from the sorted list
+        top_5_paths_for_class = sorted_paths[:int(opt.Query_batch)]  # Get the first five items from the sorted list
 
         # Create a new list to store the paths of the top 5 biggest
         paths_list = []
@@ -246,7 +246,7 @@ def calculate_similarity_bipartite(label_metric_dict, training_metric_label_dict
 
     return new_list
 
-def reverse_calculate_similarity_bipartite(label_metric_dict, training_metric_label_dict):
+def reverse_calculate_similarity_bipartite(label_metric_dict, training_metric_label_dict, opt):
     selected_paths = [[] for _ in range(len(label_metric_dict))]
 
     for true_label, label_metrics_list in label_metric_dict.items():
@@ -282,7 +282,7 @@ def reverse_calculate_similarity_bipartite(label_metric_dict, training_metric_la
         sorted_paths = sorted(paths, key=lambda x: x[0], reverse=True)
 
         # Select the top 5 biggest and store their paths
-        top_5_paths_for_class = sorted_paths[:2]  # Get the first five items from the sorted list
+        top_5_paths_for_class = sorted_paths[:int(opt.Query_batch)]  # Get the first five items from the sorted list
 
         # Create a new list to store the paths of the top 5 biggest
         paths_list = []
@@ -1273,7 +1273,7 @@ def dissimilarity_sampling_object_wise(opt, engine, train_dataset, unlabeled_dat
 def random_sampling(opt, engine, train_dataset, unlabeled_data, labeled_dataset):
     engine.model.eval()
     with torch.no_grad():
-        path_dict = {i: [] for i in range(44)}  # Initialize the dictionary to store paths for each class
+        path_dict = {i: [] for i in range(opt.NUM_CLASSES)}  # Initialize the dictionary to store paths for each class
 
         for index, (label, image, num_views, marks, train_path) in enumerate(unlabeled_data):
             targets = Variable(label).to(engine.device)
@@ -1286,8 +1286,8 @@ def random_sampling(opt, engine, train_dataset, unlabeled_data, labeled_dataset)
         old_index_train = train_dataset.selected_ind_train
         old_index_not_train = train_dataset.unselected_ind_train
 
-        for class_index in range(44):
-            for idx in range(2):
+        for class_index in range(opt.NUM_CLASSES):
+            for idx in range(int(opt.Query_batch)):
                 if path_dict[class_index]:  # Check if there are available paths for the class
                     selected_path = random.choice(path_dict[class_index])  # Get random path
 
