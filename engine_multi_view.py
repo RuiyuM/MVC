@@ -74,7 +74,7 @@ class MultiViewEngine(object):
             print('training ACC:', '%.2f' % (100 * overall_accuracy))
 
             #evaluation
-            if epoch == epochs - 1:
+            if epoch == epochs - 1 or epoch % 10 == 0:
                 with torch.no_grad():
                     overall_accuracy = self.valid()
 

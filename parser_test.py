@@ -21,6 +21,7 @@ def get_parser():
     parser.add_argument('-num_validation_view', type=str, default=cfg.num_validation_view)
     parser.add_argument('-Query_batch', type=str, default=cfg.Query_batch)
     parser.add_argument('-Optimizer_selection', type=str, default=cfg.Optimizer_selection)
+    parser.add_argument('-initial_images', type=str, default=cfg.initial_images)
 
 
 

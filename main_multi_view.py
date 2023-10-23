@@ -182,12 +182,12 @@ if __name__ == '__main__':
                                 pin_memory=True, worker_init_fn=tool.seed_worker)
 
     if opt.DATA_SET == 'MVP_N':
-        train_dataset = MultiViewDataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'test', opt.MAX_NUM_VIEWS,
+        train_dataset = MultiViewDataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'test', opt.MAX_NUM_VIEWS, opt.initial_images,
                                          use_train=True)
         # dataloader = DataLoader(train_dataset, batch_size=32, shuffle=True)
         # batch = next(iter(dataloader))
         print(f'number of view in each model: {len(train_dataset.data[0][1])} #### number of total training images: {opt.NUM_CLASSES * len(train_dataset.data[0][1])}')
-        valid_dataset = MultiViewDataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'valid', opt.MAX_NUM_VIEWS,
+        valid_dataset = MultiViewDataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'valid', opt.MAX_NUM_VIEWS, opt.initial_images,
                                          use_train=False)
 
         # test_dataset = MultiViewDataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'test', opt.MAX_NUM_VIEWS,
@@ -521,7 +521,7 @@ if __name__ == '__main__':
                                     pin_memory=True, worker_init_fn=tool.seed_worker)
 
         if opt.DATA_SET == 'MVP_N':
-            train_dataset = MultiViewDataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'test', opt.MAX_NUM_VIEWS,
+            train_dataset = MultiViewDataset(opt.CLASSES, opt.NUM_CLASSES, opt.DATA_ROOT, 'test', opt.MAX_NUM_VIEWS, opt.initial_images,
                                              use_train=True, selected_ind_train=selected_ind_train_after_sampling,
                                              unselected_ind_train=unselected_ind_train__after_sampling)
             train_data = DataLoader(train_dataset, batch_size=opt.TRAIN_MV_BS, num_workers=opt.NUM_WORKERS, shuffle=True,

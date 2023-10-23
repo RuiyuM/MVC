@@ -7,7 +7,7 @@ from torchvision import transforms
 from torch.utils.data import Dataset
 import random
 class MultiViewDataset(Dataset):
-    def __init__(self, classes, num_classes, data_root, mode, max_num_views, use_train=False, selected_ind_train=None, unselected_ind_train=None):
+    def __init__(self, classes, num_classes, data_root, mode, max_num_views, initial_images, use_train=False, selected_ind_train=None, unselected_ind_train=None):
         super(MultiViewDataset, self).__init__()
  
         self.classes = classes
@@ -16,6 +16,7 @@ class MultiViewDataset(Dataset):
         self.mode = mode
         self.max_num_views = max_num_views
         self.use_train = use_train
+        self.initial_images = initial_images
 
         self.file_path = [[] for _ in range(len(self.classes))]
         self.none_train_path = []
@@ -95,7 +96,7 @@ class MultiViewDataset(Dataset):
                 file_name = os.path.basename(file)
 
                 # Check if the file name ends with '0.png' and if less than 5 files have been selected
-                if file_name.endswith('0.png') and selected_count < 5:
+                if file_name.endswith('0.png') and selected_count < self.initial_images:
                     # Add the file to selected_ind_train and increment the counter
                     selected_ind_train[i].append(file)
                     selected_count += 1
